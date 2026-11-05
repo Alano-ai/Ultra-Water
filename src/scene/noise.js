@@ -1,4 +1,4 @@
-// Small seeded value-noise helpers for CPU-side terrain generation.
+// 用于 CPU 侧地形生成的小型带种子值噪声工具。
 
 function hash2(x, z, seed) {
   let h = Math.imul(x, 374761393) ^ Math.imul(z, 668265263) ^ Math.imul(seed, 2147483647);
@@ -20,7 +20,7 @@ export function fbm(x, z, octaves = 5, seed = 0) {
   for (let i = 0; i < octaves; i++) {
     sum += amp * valueNoise(x, z, seed + i * 17);
     norm += amp;
-    // rotate each octave to hide the lattice
+    // 旋转每个倍频以掩盖晶格
     const nx = 1.6 * x - 1.2 * z, nz = 1.2 * x + 1.6 * z;
     x = nx; z = nz; amp *= 0.5;
   }

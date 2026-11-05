@@ -1,15 +1,15 @@
 import * as THREE from 'three';
 import { islandHeight, ISLAND_SIZE } from './islandHeight.js';
 
-// Grid mesh of the island plus a float heightmap of the same footprint,
-// which the water uses for shore depth (wave damping, shallow colour, foam).
+// 岛屿的网格面，外加同覆盖范围的浮点高度图，
+// 水面用它取得岸边水深（波浪阻尼、浅水颜色、泡沫）。
 export function buildTerrain(segments = 384, mapSize = 256) {
   const geo = new THREE.PlaneGeometry(ISLAND_SIZE, ISLAND_SIZE, segments, segments);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) pos.setY(i, islandHeight(pos.getX(i), pos.getZ(i)));
-  // drop the deep seabed: below ~34 m the view through the water keeps <5% of it, so it
-  // was shading most of the screen in wide shots for nothing
+  // 丢弃深海海床：约 34 m 以下透过水面只能看到不足 5%，所以在广角镜头里
+  // 它只是在白白遮蔽大半个屏幕
   const idx = geo.index.array, keep = [];
   for (let t = 0; t < idx.length; t += 3) {
     if (Math.max(pos.getY(idx[t]), pos.getY(idx[t + 1]), pos.getY(idx[t + 2])) > -34) keep.push(idx[t], idx[t + 1], idx[t + 2]);

@@ -1,11 +1,10 @@
 import * as THREE from 'three';
 import { makeFloater } from './floaterMeshes.js';
 
-// Rigid bodies floating on the GPU ocean. Each body is split into sub-cells (the
-// descriptor's sample points); every cell gets Archimedes buoyancy for its submerged
-// fraction plus drag against the local water velocity, applied at the cell, so roll,
-// pitch and bobbing all come out of the same forces. Water heights come from
-// WaterQuery (1-3 frames late) and water velocity from their change over time.
+// 漂浮在 GPU 海洋上的刚体。每个刚体被拆成子单元（描述符里的采样点）；
+// 每个子单元按其浸没比例受到阿基米德浮力，并叠加在单元位置施加的、相对局部水流
+// 速度的阻力，因此横摇、纵摇和浮沉都出自同一组力。水面高度来自
+// WaterQuery（滞后 1-3 帧），水流速度则由位移随时间的变化求得。
 const RHO = 1025, G = 9.81;
 const SUBSTEP = 1 / 240;
 const MAX_BODIES = 28;
@@ -20,7 +19,7 @@ class Body {
     this.object = desc.object;
     this.mass = desc.density * desc.volume;
     const s = desc.size, m = this.mass;
-    // solid-box inertia; good enough for every prop shape here
+    // 实体长方体惯量；对本文件里每种道具的形状都够用
     this.invInertia = new THREE.Vector3(
       12 / (m * (s.y * s.y + s.z * s.z)), 12 / (m * (s.x * s.x + s.z * s.z)), 12 / (m * (s.x * s.x + s.y * s.y)));
     this.pos = new THREE.Vector3();
@@ -33,7 +32,7 @@ class Body {
     this.cellVolume = desc.volume / n;
     this.cellMass = m / n;
     this.world = desc.samples.map(() => new THREE.Vector3());
-    // per sample: water height, water velocity (x, y, z), last displacement for velocity
+    // 每个采样点：水面高度、水流速度 (x, y, z)、用于求速度的上一次位移
     this.water = new Float32Array(n * 4);
     this.lastDisp = new Float32Array(n * 3).fill(NaN);
   }
@@ -55,18 +54,18 @@ class Body {
 
 export class Floaters {
   constructor({ scene, heightAt, patchMaterial }) {
-    // own (nested) scene so the floater shadow map can render just these
+    // 独立的（嵌套）场景，好让浮体阴影贴图只渲染这些物体
     this.scene = new THREE.Scene();
     scene.add(this.scene);
     this.heightAt = heightAt;
     this.patchMaterial = patchMaterial;
     this.bodies = [];
-    this.layout = 0;                       // bumps whenever the sample layout changes
-    this.points = new Float32Array(1024);  // xz pairs submitted to WaterQuery
+    this.layout = 0;                       // 采样布局变更时自增
+    this.points = new Float32Array(1024);  // 提交给 WaterQuery 的 xz 对
     this.count = 0;
     this.params = { drag: 1.6, angularDrag: 0.8, buoyancy: 1 };
     this.time = 0;
-    this.impacts = [];   // last few water entries: { x, z, t, amp, size } for ripple rings
+    this.impacts = [];   // 最近几次入水：{ x, z, t, amp, size }，用于涟漪环
   }
 
   add(kind, pos, yaw = Math.random() * Math.PI * 2) {
@@ -88,7 +87,7 @@ export class Floaters {
     this.layout++;
   }
 
-  // a small flotsam field in front of a viewpoint
+  // 在视角前方生成一小片漂浮物
   spawn(center, forward) {
     this.clear();
     const f = _f.copy(forward).setY(0).normalize(), side = new THREE.Vector3(-f.z, 0, f.x);
@@ -99,7 +98,7 @@ export class Floaters {
     [[14, -2], [24, 14], [34, -8]].forEach(([a, c]) => this.add('barrel', at(a, c)));
   }
 
-  // sample points for this frame's water query
+  // 本帧水面查询的采样点
   collectPoints(extra) {
     let k = 0;
     for (const e of extra) { this.points[k++] = e.x; this.points[k++] = e.z; }
@@ -108,7 +107,7 @@ export class Floaters {
     return this.points;
   }
 
-  // consume a WaterQuery result (offset = number of non-body points submitted first)
+  // 消费一个 WaterQuery 结果（offset = 先提交的非刚体点数量）
   ingest(query, offset) {
     if (query.resultTag !== this.layout || query.resultTime === this.lastResultTime) return;
     const dtR = this.lastResultTime === undefined ? 0 : query.resultTime - this.lastResultTime;
@@ -122,9 +121,9 @@ export class Floaters {
         const w = b.water, ld = b.lastDisp;
         w[i * 4] = h;
         if (dtR > 1e-4 && !Number.isNaN(ld[i * 3])) {
-          // water velocity from the change in displacement at a fixed point. At steep
-          // fronts that overstates particle speed (the front sweeps past), so clamp to
-          // roughly the largest orbital speeds these waves have
+          // 由固定点处位移的变化求水流速度。在陡峭的
+          // 波前处这会高估水质点速度（波前扫过该点），因此钳制到
+          // 这些波浪大致能达到的最大轨道速度
           const c = (v, m) => Math.max(-m, Math.min(m, v));
           w[i * 4 + 1] = c((dx - ld[i * 3]) / dtR, 3);
           w[i * 4 + 2] = c((h - ld[i * 3 + 1]) / dtR, 0.8);
@@ -155,12 +154,12 @@ export class Floaters {
     for (let i = 0; i < b.world.length; i++) {
       const p = b.world[i], w = b.water;
       _r.subVectors(p, b.pos);
-      _vp.copy(b.angVel).cross(_r).add(b.vel);                 // velocity of this cell
+      _vp.copy(b.angVel).cross(_r).add(b.vel);                 // 该单元的速度
       const sub = THREE.MathUtils.clamp((w[i * 4] - p.y) / cell + 0.5, 0, 1);
       if (sub > 0) {
         wet = true;
         _v.set(0, RHO * G * b.cellVolume * sub * P.buoyancy, 0);
-        // drag against the moving water (gives orbital bobbing and surf push)
+        // 相对运动水体的阻力（产生轨道式浮沉与拍岸浪的推力）
         const k = P.drag * b.cellMass * sub;
         _v.x -= (_vp.x - w[i * 4 + 1]) * k;
         _v.y -= (_vp.y - w[i * 4 + 2]) * k * 1.5;
@@ -168,7 +167,7 @@ export class Floaters {
         force.add(_v);
         torque.add(_c.copy(_r).cross(_v));
       }
-      // beach / seabed contact: stiff spring + friction
+      // 海滩 / 海底接触：刚性弹簧 + 摩擦
       const ground = this.heightAt(p.x, p.z);
       const pen = ground - p.y;
       if (pen > 0) {
@@ -178,7 +177,7 @@ export class Floaters {
         torque.add(_c.copy(_r).cross(_v));
       }
     }
-    // hitting the water fast: ripple rings (and a splash) sized by the body and speed
+    // 高速入水：涟漪环（和溅水），尺寸由刚体与速度决定
     if (wet && !b.wet && b.vel.y < -1.5) {
       const s = b.desc.size;
       this.impacts.push({ x: b.pos.x, z: b.pos.z, t: this.time, amp: Math.min(0.35, 0.03 * -b.vel.y * Math.min(s.x, s.z)), size: Math.max(s.x, s.z) * 0.5 });
@@ -188,7 +187,7 @@ export class Floaters {
     b.vel.addScaledVector(force, h / b.mass);
     b.pos.addScaledVector(b.vel, h);
 
-    // world inverse inertia = R diag(I^-1) R^T
+    // 世界空间逆惯量 = R diag(I^-1) R^T
     _m.setFromMatrix4(_m4.makeRotationFromQuaternion(b.quat));
     _mt.copy(_m).transpose();
     _w.copy(torque).applyMatrix3(_mt).multiply(b.invInertia).applyMatrix3(_m);

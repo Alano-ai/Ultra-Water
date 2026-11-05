@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-// Procedural ocean floaters: one vertex-coloured mesh per kind, origin ~ centre of mass, +y up.
-// Physics lives elsewhere; each builder only returns geometry + buoyancy metadata.
+// 程序化生成的海洋浮体：每种类型一个顶点着色网格，原点约在质心，+y 朝上。
+// 物理在别处；每个构建函数只返回几何体 + 浮力元数据。
 export const FLOATER_KINDS = ['crate', 'barrel', 'buoy', 'boat'];
 
 const col = (hex, k = 1) => new THREE.Color(hex).multiplyScalar(k);
@@ -28,7 +28,7 @@ function colorAttr(n, colorAt) {
 const paint = (geo, c) => geo.setAttribute('color', colorAttr(geo.attributes.position.count, () => c));
 const box = (w, h, d, x, y, z, c) => paint(new THREE.BoxGeometry(w, h, d).translate(x, y, z), c);
 
-// volume of a revolved profile of (r, y) points (frustum sum)
+// (r, y) 点构成的旋转轮廓的体积（圆台求和）
 function latheVolume(pts) {
   let v = 0;
   for (let i = 1; i < pts.length; i++) {
@@ -38,7 +38,7 @@ function latheVolume(pts) {
   return v;
 }
 
-// signed volume + centroid x of a closed, non-indexed triangle soup
+// 闭合、非索引三角形集合的有符号体积 + 质心 x 坐标
 function solid(geo) {
   const p = geo.attributes.position, a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
   let vol = 0, cx = 0;
@@ -53,14 +53,14 @@ function solid(geo) {
 function crate() {
   const rnd = rng(11), S = 0.9, h = S / 2, T = 0.09, o = h - T / 2;
   const inner = S - 2 * T, N = 5, pw = inner / N;
-  // dark core shows through the plank seams
+  // 深色内核从木板缝隙透出
   const parts = [box(0.84, 0.84, 0.84, 0, 0, 0, col(0x2e2117))];
-  for (let a = 0; a < 3; a++) for (const p of [-1, 1]) for (const q of [-1, 1]) { // 12 frame beams
+  for (let a = 0; a < 3; a++) for (const p of [-1, 1]) for (const q of [-1, 1]) { // 12 根框架梁
     const d = [T, T, T], c = [0, 0, 0];
     d[a] = S; c[(a + 1) % 3] = p * o; c[(a + 2) % 3] = q * o;
     parts.push(box(...d, ...c, col(0x6e4d2f, 0.9 + 0.2 * rnd())));
   }
-  for (let n = 0; n < 3; n++) for (const s of [-1, 1]) { // 6 faces x 5 planks
+  for (let n = 0; n < 3; n++) for (const s of [-1, 1]) { // 6 个面 × 5 块木板
     const run = (n + 1) % 3, stack = (n + 2) % 3;
     for (let i = 0; i < N; i++) {
       const d = [0, 0, 0], c = [0, 0, 0];
@@ -78,43 +78,43 @@ function barrel() {
   const L = 0.95, Rm = 0.32, Re = 0.27, hoop = 0.012, SEG = 24;
   const bands = [[-0.44, -0.375], [-0.22, -0.17], [-0.035, 0.035], [0.17, 0.22], [0.375, 0.44]];
   const inHoop = (y) => bands.some(([a, b]) => y > a && y < b);
-  // profile (r, y): parabolic bulge, hoops raised; paired points at band edges keep the steps crisp
+  // 轮廓 (r, y)：抛物线鼓形，箍带处抬高；在箍带边缘放置成对的点以保持台阶锐利
   const ys = [];
   for (let i = 0; i <= 40; i++) ys.push(-L / 2 + L * i / 40);
   for (const [a, b] of bands) ys.push(a - 0.0015, a + 0.0015, b - 0.0015, b + 0.0015);
   ys.sort((a, b) => a - b);
   const pts = ys.map((y) => new THREE.Vector2(Re + (Rm - Re) * (1 - (2 * y / L) ** 2) + (inHoop(y) ? hoop : 0), y));
 
-  const body = new THREE.LatheGeometry(pts, SEG); // vertex = radial * pts.length + profile
+  const body = new THREE.LatheGeometry(pts, SEG); // 顶点 = 径向 * pts.length + 轮廓
   const rnd = rng(5), stave = Array.from({ length: SEG }, () => 0.85 + 0.3 * rnd());
   const paintRed = col(0x8d3b2d), steel = col(0x2a2d32), pos = body.attributes.position;
   body.setAttribute('color', colorAttr(pos.count, (i) =>
     inHoop(pos.getY(i)) ? steel : paintRed.clone().multiplyScalar(stave[Math.floor(i / pts.length) % SEG])));
-  body.rotateZ(Math.PI / 2); // axis -> local X
+  body.rotateZ(Math.PI / 2); // 轴向 -> 局部 X 轴
 
-  const head = [col(0x9c7248), col(0x6f4e2f)]; // oak: lighter centre, darker rim
+  const head = [col(0x9c7248), col(0x6f4e2f)]; // 橡木：中心较亮，边缘较暗
   const caps = [-1, 1].map((s) => {
     const g = new THREE.CircleGeometry(Re, SEG).rotateY(s * Math.PI / 2).translate(s * L / 2, 0, 0);
     return g.setAttribute('color', colorAttr(g.attributes.position.count, (i) => head[i ? 1 : 0]));
   });
 
-  // 4 along the axis x 2 half-discs (centroid of a half disc is 4r/3pi ~ 0.14 off-axis)
+  // 沿轴向 4 个 × 2 个半圆盘（半圆盘质心距轴 4r/3pi 约 0.14）
   const samples = [];
   for (const x of [-3 * L / 8, -L / 8, L / 8, 3 * L / 8]) for (const y of [-0.14, 0.14]) samples.push(new THREE.Vector3(x, y, 0));
   return { geo: mergeGeometries([body, ...caps]), rough: 0.7, metal: 0.1, volume: latheVolume(pts), density: 420, samples, cellHeight: Rm };
 }
 
 function buoy() {
-  const R = 0.5, rb = 0.1, off = 0.06, band = 0.11; // float radius, ballast stub radius, origin below float centre, half band height
+  const R = 0.5, rb = 0.1, off = 0.06, band = 0.11; // 浮球半径、配重柱半径、原点低于浮球中心的距离、箍带半高
   const y0 = Math.sqrt(R * R - rb * rb), th0 = Math.asin(y0 / R);
   const ys = [];
   for (let i = 0; i <= 40; i++) ys.push(R * Math.sin(-th0 + 2 * th0 * i / 40));
   for (const e of [-band, band]) ys.push(e - 0.003, e + 0.003);
   ys.sort((a, b) => a - b);
   const pts = [
-    new THREE.Vector2(0, -0.8), new THREE.Vector2(rb, -0.8), // lead ballast stub
+    new THREE.Vector2(0, -0.8), new THREE.Vector2(rb, -0.8), // 铅配重柱
     ...ys.map((y) => new THREE.Vector2(Math.sqrt(R * R - y * y), y)),
-    new THREE.Vector2(rb, 0.56), new THREE.Vector2(0, 0.56), // mast collar
+    new THREE.Vector2(rb, 0.56), new THREE.Vector2(0, 0.56), // 桅杆底座
   ];
   const red = col(0xc42a1e), white = col(0xe8e4d8), dark = col(0x2a2d32);
   const float = new THREE.LatheGeometry(pts, 28);
@@ -126,33 +126,33 @@ function buoy() {
 
   const parts = [
     float,
-    paint(new THREE.CylinderGeometry(0.022, 0.028, 0.45, 8).translate(0, 0.775, 0), col(0x7b8087)), // mast
-    paint(new THREE.CylinderGeometry(0.1, 0.1, 0.016, 12).translate(0, 1.0, 0), dark), // cage floor
-    paint(new THREE.ConeGeometry(0.1, 0.15, 12).translate(0, 1.225, 0), red), // topmark
+    paint(new THREE.CylinderGeometry(0.022, 0.028, 0.45, 8).translate(0, 0.775, 0), col(0x7b8087)), // 桅杆
+    paint(new THREE.CylinderGeometry(0.1, 0.1, 0.016, 12).translate(0, 1.0, 0), dark), // 笼底
+    paint(new THREE.ConeGeometry(0.1, 0.15, 12).translate(0, 1.225, 0), red), // 顶标
   ];
-  for (let i = 0; i < 4; i++) { // cage struts
+  for (let i = 0; i < 4; i++) { // 笼架支杆
     const a = Math.PI / 4 + i * Math.PI / 2;
     parts.push(paint(new THREE.CylinderGeometry(0.008, 0.008, 0.15, 4).translate(0.085 * Math.cos(a), 1.083, 0.085 * Math.sin(a)), dark));
   }
   parts.forEach((g) => g.translate(0, off, 0));
 
-  const k = 0.19, samples = []; // octant centroids of the float sphere (3R/8)
+  const k = 0.19, samples = []; // 浮球的八分体质心（3R/8）
   for (const x of [-k, k]) for (const y of [-k, k]) for (const z of [-k, k]) samples.push(new THREE.Vector3(x, off + y, z));
   return { geo: mergeGeometries(parts), rough: 0.45, metal: 0.05, volume: latheVolume(pts), density: 300, samples, cellHeight: R };
 }
 
 function boat() {
   const L = 3.6, HW = 0.65, SX = 24, SY = 5, SZ = 8;
-  // deformed segmented box: box coords (u, v, w) in [-0.5, 0.5] -> hull point (x along length, +x bow)
+  // 变形的分段长方体：盒坐标 (u, v, w) 在 [-0.5, 0.5] 范围内 -> 船体点（x 沿船长方向，+x 朝船首）
   const hull = (u, v, w, o) => {
     const t = u + 0.5, zn = Math.abs(2 * w), vv = v + 0.5;
-    // plan: squarish transom at 0.62 beam, full beam at t=0.4, pointed bow
+    // 俯视平面：0.62 船宽的近方形艉板，t=0.4 处达到全宽，尖船首
     const f = t < 0.4 ? 0.62 + 0.38 * Math.sin(t / 0.4 * Math.PI / 2) : Math.max(0.02, 1 - ((t - 0.4) / 0.6) ** 1.8);
     const sb = Math.max(0, (t - 0.3) / 0.7), ss = Math.max(0, (0.3 - t) / 0.3);
-    const top = 0.4 + 0.22 * sb * sb + 0.05 * ss * ss; // sheer rises toward bow
-    const keel = -0.2 + 0.2 * Math.max(0, (t - 0.5) / 0.5) ** 1.6 + 0.05 * (1 - t) ** 2; // rocker
-    const bot = keel + 0.2 * zn ** 1.5; // rounded V
-    return o.set(u * L, bot + (top - bot) * vv, 2 * w * HW * f * (0.8 + 0.2 * vv)); // flared topsides
+    const top = 0.4 + 0.22 * sb * sb + 0.05 * ss * ss; // 舷弧向船首升高
+    const keel = -0.2 + 0.2 * Math.max(0, (t - 0.5) / 0.5) ** 1.6 + 0.05 * (1 - t) ** 2; // 龙骨纵弧
+    const bot = keel + 0.2 * zn ** 1.5; // 圆润 V 形
+    return o.set(u * L, bot + (top - bot) * vv, 2 * w * HW * f * (0.8 + 0.2 * vv)); // 外张的舷侧
   };
 
   const g = new THREE.BoxGeometry(1, 1, 1, SX, SY, SZ);
@@ -163,7 +163,7 @@ function boat() {
   }
   g.computeVertexNormals();
 
-  // flat colour per triangle: rows of the box give the paint scheme, deck columns give planks
+  // 每个三角形的纯色：长方体的行决定涂装，甲板的列决定木板
   const rnd = rng(3);
   const under = col(0x1c3e44), stripe = col(0x2a8f8c), white = col(0xe9e6dc), trim = col(0x4a3020);
   const rows = [under, under, stripe, white, trim];
@@ -182,14 +182,14 @@ function boat() {
   const { vol, cx } = solid(hullGeo);
 
   const parts = [hullGeo];
-  for (const u of [-0.1, 0.12]) { // two thwarts resting on the deck
+  for (const u of [-0.1, 0.12]) { // 两块搭在甲板上的坐板
     hull(u, 0.5, 0.5, p);
     parts.push(box(0.26, 0.045, p.z * 2 * 0.76, p.x, p.y + 0.0125, 0, col(0xb58a58)).toNonIndexed());
   }
 
   const samples = [];
   for (let i = 0; i < 4; i++) for (const v of [-0.25, 0.25]) for (const w of [-0.25, 0.25]) samples.push(hull((i + 0.5) / 4 - 0.5, v, w, new THREE.Vector3()));
-  const geo = mergeGeometries(parts).translate(-cx, 0, 0); // COM (along length) at origin
+  const geo = mergeGeometries(parts).translate(-cx, 0, 0); // 让质心（沿船长方向）落在原点
   samples.forEach((s) => s.x -= cx);
   return { geo, rough: 0.55, metal: 0, volume: vol, density: 280, samples, cellHeight: 0.3 };
 }
@@ -204,9 +204,9 @@ export function makeFloater(kind, patchMaterial) {
   patchMaterial(material);
   const mesh = new THREE.Mesh(geo, material);
   mesh.name = `floater-${kind}`;
-  mesh.castShadow = false;  // floaters have their own shadow map (floaterShadow.js)
+  mesh.castShadow = false;  // 浮体有自己的阴影贴图（floaterShadow.js）
   mesh.receiveShadow = true;
-  mesh.layers.enable(1); // planar reflection layer
+  mesh.layers.enable(1); // 平面反射层
   geo.computeBoundingBox();
   const size = geo.boundingBox.getSize(new THREE.Vector3());
   return { kind, object: mesh, size, volume: meta.volume, density: meta.density, samples: meta.samples, cellHeight: meta.cellHeight };

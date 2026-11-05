@@ -1,6 +1,6 @@
 import { fbm, ridged } from './noise.js';
 
-// Island footprint in world units (metres). Terrain mesh and the shore heightmap share it.
+// 岛屿覆盖范围，以世界单位（米）计。地形网格与海岸高度图共用它。
 export const ISLAND_SIZE = 2400;
 
 const smooth = (a, b, x) => {
@@ -8,7 +8,7 @@ const smooth = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 
-// Height above sea level (y = 0). Coastline sits around r ~ 330 m, seabed falls to -42 m.
+// 相对海平面（y = 0）的高度。海岸线大致在 r ~ 330 m 处，海床下降到 -42 m。
 export function islandHeight(x, z) {
   const warp = fbm(x * 0.0035 + 11.3, z * 0.0035 - 4.1, 4, 3);
   const r = Math.hypot(x - 40 * warp, z + 30 * warp) * (1 + 0.32 * fbm(x * 0.003, z * 0.003, 3, 7));
@@ -16,11 +16,11 @@ export function islandHeight(x, z) {
   let h = 62 * Math.exp(-((r / 190) ** 2)) + 15 * Math.exp(-((r / 430) ** 2)) - 10;
   h -= 32 * smooth(380, 1100, r);
 
-  // rocky ridges only on the mountain
+  // 岩石山脊只出现在山体上
   const mountain = smooth(4, 40, h);
   h += mountain * 26 * (ridged(x * 0.009, z * 0.009, 5, 1) - 0.45);
 
-  // gentle beaches above the waterline, shallow turquoise shelf below it
+  // 水线以上是平缓的海滩，以下是绿松石色的浅水台地
   if (h > 0 && h < 5) h *= 0.55 + 0.09 * h;
   else if (h <= 0 && h > -14) h = -14 * Math.pow(-h / 14, 1.8);
 

@@ -7,9 +7,9 @@ import { CAUSTICS_GLSL } from '../water/Caustics.js';
 import { FLOAT_SHADOW_GLSL } from './floaterShadow.js';
 import { SHORE_GLSL, SWASH_GLSL } from '../water/OceanSurface.js';
 
-// Island + shore rocks on MeshStandardMaterial, patched with: biome colouring,
-// wet sand sheen, refracted + absorbed sunlight under water, wave-driven caustics and
-// the floater shadow map.
+// MeshStandardMaterial 上的岛屿 + 岸边礁石，打补丁加入：生物群系着色、
+// 湿沙光泽、水下经折射与吸收的阳光、波浪驱动的焦散，以及
+// 浮体阴影贴图。
 const VERT_PARS = /* glsl */`
 varying vec3 vWPos;
 varying vec3 vWNrm;
@@ -33,12 +33,12 @@ ${SWASH_GLSL}
 float th(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float tn(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
   return mix(mix(th(i), th(i + vec2(1, 0)), u.x), mix(th(i + vec2(0, 1)), th(i + 1.0), u.x), u.y); }
-// ripple marks: the phase along d (wavenumber w) is warped by noise of scale s and
-// amplitude a (metres along d), so crests meander and fork where the warp gets steep
+// 波纹痕迹：沿 d 的相位（波数 w）被尺度 s、幅度 a（沿 d 的米数）的噪声扭曲，
+// 于是波峰会在扭曲变陡处蜿蜒并分叉
 float ripplePhase(vec2 p, vec2 d, float w, float s, float a) {
   return w * (dot(p, d) + (tn(p * s) - 0.5) * a + (tn(p * s * 0.27 + 4.0) - 0.5) * a * 3.0);
 }
-// slope of h = amp (sin ph - 0.25 cos 2ph): sharp crests, broad troughs
+// h = amp (sin ph - 0.25 cos 2ph) 的斜率：波峰尖锐、波谷宽阔
 vec2 rippleSlope(vec2 p, vec2 d, float w, float s, float a, float amp) {
   float ph = ripplePhase(p, d, w, s, a);
   vec2 grad = (vec2(ripplePhase(p + vec2(0.01, 0.0), d, w, s, a), ripplePhase(p + vec2(0.0, 0.01), d, w, s, a)) - ph) / 0.01;
@@ -46,7 +46,7 @@ vec2 rippleSlope(vec2 p, vec2 d, float w, float s, float a, float amp) {
 }
 uniform mat4 uSunShadowMatrix;
 #ifdef ROCK
-// 3D value noise: the rock faces are steep, a 2D world-xz pattern would streak down them
+// 3D 值噪声：岩壁很陡，用世界坐标 xz 的 2D 图案会沿其垂向拉出条纹
 float th3(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
 float tn3(vec3 p) { vec3 i = floor(p), f = fract(p); vec3 u = f * f * (3.0 - 2.0 * f);
   return mix(mix(mix(th3(i), th3(i + vec3(1, 0, 0)), u.x), mix(th3(i + vec3(0, 1, 0)), th3(i + vec3(1, 1, 0)), u.x), u.y),
@@ -63,8 +63,8 @@ const ALBEDO = /* glsl */`
   vec3 grass = mix(vec3(0.20, 0.30, 0.10), vec3(0.33, 0.37, 0.15), n1) * (0.85 + 0.3 * n2);
   vec3 rock = mix(vec3(0.33, 0.31, 0.29), vec3(0.45, 0.41, 0.36), n2) * (0.8 + 0.4 * n3);
 #ifdef ROCK
-  // banded stone (cavities come from the vertex colour), a dark weed-and-barnacle band
-  // through the tidal range and salt-bleached patches on the dry tops
+  // 条带状岩石（凹陷来自顶点色）、一条横穿潮位范围的深色海藻与藤壶带，
+  // 以及干燥岩顶上被盐漂白的斑块
   float r1 = tn3(vWPos * 0.9), r2 = tn3(vWPos * 3.7 + 7.0);
   float strata = sin(vWPos.y * 2.2 + r1 * 3.0) * 0.5 + 0.5;
   vec3 albedo = mix(vec3(0.27, 0.25, 0.23), vec3(0.52, 0.47, 0.41), r1 * 0.6 + strata * 0.25 + r2 * 0.15);
@@ -78,44 +78,43 @@ const ALBEDO = /* glsl */`
   albedo = mix(albedo, rock, smoothstep(0.78, 0.62, flat_) * smoothstep(-6.0, 1.0, hgt));
   albedo = mix(albedo, rock * 1.1, smoothstep(38.0, 52.0, hgt + n1 * 8.0));
 #endif
-  // wet band above the waterline, plus where the swash has run (dries over seconds)
+  // 水线以上的湿带，以及上冲流经过的地方（几秒内就会变干）
   vec3 sw = swash(vWPos.xz, hgt);
   float wet = max(1.0 - smoothstep(0.35, 1.3 + 0.5 * n1, hgt), sw.z);
-  // water filling the pores darkens sand and deepens its colour (light bounces more
-  // times inside the grains before it escapes, so each tint compounds): roughly the
-  // albedo squared, not a flat grey multiply, which reads as cold concrete. Below the
-  // waterline the bed keeps a flatter darkening, or a metre of water turns it olive.
+  // 填满孔隙的水会让沙变暗、颜色更深（光要在沙粒内部多反弹几次才能逃出，
+  // 于是每一层染色都叠加起来）：大致相当于反照率取平方，而不是平铺的灰色
+  // 乘算——后者看起来像冰冷的混凝土。水线以下的海床则保持较平的变暗，否则
+  // 一米深的水就会把它变成橄榄色。
   albedo *= mix(vec3(1.0), mix(0.8 * albedo + 0.06, vec3(0.6), smoothstep(0.0, -0.8, hgt)), wet);
-  // the swash film itself: wet-shiny from the first mm (rippled, so a soft sheen rather
-  // than a sky mirror) and only faintly tinted, since a few cm of water absorb almost
-  // nothing; the sea's colour comes from depth, not the film
+  // 上冲流水膜本身：从第一毫米起就湿润发亮（因有波纹，所以是柔和光泽而非
+  // 天空镜子），并且只带极淡的色调，因为几厘米的水几乎不吸收什么；海的
+  // 颜色来自深度，而不是这层水膜
   float film = smoothstep(0.0, 0.004, sw.x) * smoothstep(-0.05, 0.05, hgt);
   albedo *= mix(vec3(1.0), vec3(0.9, 0.97, 0.97), smoothstep(0.0, 0.06, sw.x) * film);
-  // bubbles: lace on the running-up edge, broken remnants carried down in the backwash.
-  // The less foam is left, the higher the threshold, so it breaks into ever smaller
-  // islands as it pops rather than fading as a uniform veil
+  // 气泡：上冲边缘的蕾丝状泡沫，回流时被带下来的破碎残留。剩下的泡沫越少，
+  // 阈值就越高，所以它破灭时是碎成越来越小的岛屿，而不是作为一层均匀的
+  // 面纱淡化消失
   float fwP = max(fwidth(vWPos.x), fwidth(vWPos.z));
   if (sw.y > 0.0) {
     float lace = smoothstep(0.75 - 0.4 * sw.y, 0.92 - 0.3 * sw.y, tn(vWPos.xz * 3.1 + uTime * 0.15) * 0.6 + tn(vWPos.xz * 7.3) * 0.4);
-    // the lace cells shrink below a pixel far off: their average there, not a shimmer
+    // 远处的蕾丝单元会缩到一个像素以下：在那里取平均值，而不是让它闪烁
     lace = mix(lace, 0.3, smoothstep(0.05, 0.3, fwP));
-    // a few cm of bubbles over wet sand: pale and sand-tinted, never paper white
+    // 湿沙上几厘米厚的气泡：颜色偏淡并带沙的色调，绝不是纸白色
     albedo = mix(albedo, albedo * 0.4 + vec3(0.42, 0.41, 0.38), min(sw.y * 1.4, 1.0) * lace * 0.7);
   }
   diffuseColor.rgb = albedo;
 `;
 
-// sand ripples + grain bump in world space, faded out before they alias
+// 世界空间中的沙纹 + 沙粒凹凸，在出现走样之前淡出
 const RIPPLES = /* glsl */`
 #ifndef ROCK
   {
     vec2 fw = fwidth(vWPos.xz);
     float px = max(fw.x, fw.y);
-    if (px < 0.5) {   // both ripple bands are faded out beyond this
+    if (px < 0.5) {   // 超过这个尺度，两条波纹带都已淡出
     float sandMask = (1.0 - smoothstep(sandLine - 0.5, sandLine + 0.5, hgt)) * smoothstep(0.85, 0.95, flat_);
-    sandMask *= mix(1.0, 0.25, smoothstep(-0.3, 0.6, hgt)); // dry sand: faint wind ripples only
-    // long wave-formed ripples (~1.6 m) and short ones (~0.3 m), each fading in and out
-    // in patches
+    sandMask *= mix(1.0, 0.25, smoothstep(-0.3, 0.6, hgt)); // 干沙：只有淡淡的风成沙纹
+    // 波浪形成长沙纹（约 1.6 m）与短沙纹（约 0.3 m），各自成片地淡入淡出
     vec2 p = vWPos.xz;
     vec2 d1 = normalize(vec2(0.8, 0.6) + (vec2(tn(p * 0.02), tn(p * 0.02 + 5.0)) - 0.5));
     float a1 = 0.02 * (0.3 + 0.7 * smoothstep(0.25, 0.75, tn(p * 0.06 + 11.0)));
@@ -130,8 +129,8 @@ const RIPPLES = /* glsl */`
   }
 #else
   {
-    // crags and grain: a bump from the 3D noise through screen derivatives (no texture),
-    // the fine octave faded out before it aliases
+    // 岩崖与颗粒感：用屏幕导数从 3D 噪声得到凹凸（不使用纹理），
+    // 细节倍频在出现走样之前淡出
     float px = length(fwidth(vWPos));
     float bh = tn3(vWPos * 1.6) * 0.6 + r2 * 0.25 + tn3(vWPos * 9.0) * 0.15 * (1.0 - smoothstep(0.03, 0.12, px));
     vec3 dpx = dFdx(vWPos), dpy = dFdy(vWPos);
@@ -146,18 +145,16 @@ const RIPPLES = /* glsl */`
 
 const UNDERWATER = /* glsl */`
   float wdepth = max(-vWPos.y, 0.0);
-  // sun and sky light reaching the bed through the water column (the sun along its
-  // refracted path)
+  // 穿过水柱到达海床的阳光与天空光（太阳沿其折射后的路径）
   vec3 rsun = refract(-uSunDirT, vec3(0.0, 1.0, 0.0), 1.0 / 1.33);
   float sunPath = wdepth / max(-rsun.y, 0.1);
   diffuseColor.rgb *= exp(-uAbsorption * (sunPath * 0.6 + wdepth * 0.4));
 `;
 
-// Direct sun (spliced into three's light loop, one directional light): floater shadows
-// everywhere; below the surface the light arrives refracted (much steeper than the
-// grazing sun outside), dimmed by the Fresnel transmission, and both shadow maps are
-// read where it came through the surface, so the bed isn't shadowed along the
-// unrefracted ray by every sand bar up-sun.
+// 直射阳光（拼接进 three 的光照循环，一盏平行光）：处处都有浮体阴影；
+// 水面以下，光以折射后的方向到达（比外面掠射的太阳陡得多），并被菲涅尔
+// 透射衰减；两张阴影贴图都在光穿过水面处采样，因此海床不会被上游的
+// 每一条沙洲沿着未折射的光线遮蔽。
 const SUN = /* glsl */`
     getDirectionalLightInfo( directionalLight, directLight );
     float under = smoothstep(0.05, -0.25, vWPos.y);
@@ -184,15 +181,15 @@ const ROUGH = /* glsl */`
   roughnessFactor = mix(mix(roughnessFactor, 0.32, wet * smoothstep(-0.05, 0.05, hgt)), 0.2, film);
 `;
 
-// caustics focused by the actual waves (Caustics.js); mean 1, so they only redistribute
-// the direct sun
+// 由真实波浪聚焦的焦散（Caustics.js）；均值为 1，因此它们只是重新分配
+// 直射阳光
 const CAUSTICS = /* glsl */`
   if (wdepth > 0.0 && rsun.y < -0.05) {
-    vec2 entry = vWPos.xz + rsun.xz / rsun.y * wdepth;   // where this light entered the surface
+    vec2 entry = vWPos.xz + rsun.xz / rsun.y * wdepth;   // 这束光穿入水面处
     vec2 fwc = fwidth(entry);
     float c = waveCaustic(entry, wdepth, log2(max(max(fwc.x, fwc.y) * CAUSTIC_TEXELS_PER_M, 1.0)));
-    // a little more contrast in the first metre or two, where the net is sharpest; faded
-    // in over the top few cm so the waterline doesn't get a hard caustic seam
+    // 头一两米对比度略高，那里网纹最锐利；在顶部几厘米内淡入，
+    // 这样水线处不会出现一道生硬的焦散缝
     float cs = uCausticStrength * mix(1.35, 1.0, smoothstep(1.5, 3.0, wdepth)) * smoothstep(0.0, 0.3, wdepth);
     reflectedLight.directDiffuse *= max(mix(1.0, c, cs), 0.0);
   }
@@ -204,8 +201,8 @@ const FOG = /* glsl */`
   outgoingLight = mix(outgoingLight, textureLod(uSkyCube, vec3(fdir.x, max(fdir.y, 0.0), fdir.z), 3.0).rgb, fogAmt);
 `;
 
-// mode: 'terrain' | 'rock' | 'prop' (props keep their own colours, just get the
-// underwater light falloff, caustics and fog)
+// mode: 'terrain' | 'rock' | 'prop'（道具保留自己的颜色，只是额外获得
+// 水下光衰减、焦散和雾）
 function patch(material, uniforms, mode) {
   const ground = mode !== 'prop';
   if (mode === 'rock') material.defines = { ...material.defines, ROCK: '' };
@@ -247,15 +244,15 @@ function rockGeometry() {
     v.fromBufferAttribute(p, i);
     const n = fbm(v.x * 1.4 + 3, v.z * 1.4 + v.y * 0.7, 5, 21);
     const facet = Math.abs(fbm(v.x * 3.1, v.y * 3.1 + v.z, 3, 5));
-    // ridged cracks cut into the surface
+    // 刻进表面的脊状裂缝
     const crack = Math.abs(fbm(v.x * 5.7 + v.z * 1.9, v.y * 5.7 - v.z * 1.3, 2, 9));
     const d = 1 + 0.38 * n - 0.12 * facet - 0.06 * Math.max(0.12 - crack, 0) / 0.12;
     v.multiplyScalar(d);
-    // a hint of bedding: the height steps a little, like layered rock
+    // 一点点层理暗示：高度有小幅台阶，像层状岩石
     v.y -= 0.7 * Math.sin(v.y * 8 * Math.PI) / (8 * Math.PI);
-    if (v.y < -0.2) v.y = -0.2 + (v.y + 0.2) * 0.4;   // flattish base
+    if (v.y < -0.2) v.y = -0.2 + (v.y + 0.2) * 0.4;   // 较平的底部
     p.setXYZ(i, v.x, v.y, v.z);
-    // cavity occlusion baked into the vertex colour: hollows and cracks darker
+    // 烘焙进顶点色的凹陷遮蔽：凹坑和裂缝更暗
     const c = Math.min(Math.max(0.78 + 0.9 * (d - 1), 0.42), 1) * (0.65 + 0.35 * Math.min(crack / 0.12, 1));
     ao[i * 3] = ao[i * 3 + 1] = ao[i * 3 + 2] = c;
   }
@@ -264,9 +261,8 @@ function rockGeometry() {
   return g;
 }
 
-// one big rock out in the surf on the swell-exposed coast (the default swell comes from
-// bearing -15 deg), in ~2.5 m of water so the swash wraps round it; the 'Surf rock'
-// camera looks at it
+// 一块大礁石，位于受涌浪冲刷的海岸的拍岸浪里（默认涌浪来自方位角 -15 度），
+// 处在约 2.5 m 深的水中，好让上冲流绕过它；'Surf rock' 镜头正对着它
 export const heroRock = (() => {
   const a = THREE.MathUtils.degToRad(-15);
   let r = 100;
@@ -278,7 +274,7 @@ function placeRocks(count, rand) {
   const out = [];
   for (let i = 0; i < count * 6 && out.length < count; i++) {
     const a = rand() * Math.PI * 2;
-    // walk outwards to the coast along this bearing, then jitter around it
+    // 沿这个方位角向外走到海岸，再在其附近抖动
     let r = 150;
     while (r < 700 && islandHeight(Math.cos(a) * r, Math.sin(a) * r) > 0) r += 4;
     r += (rand() - 0.6) * 40;
@@ -287,7 +283,7 @@ function placeRocks(count, rand) {
     if (h < -5 || h > 6) continue;
     const s = 1.5 + Math.pow(rand(), 2.2) * 9;
     out.push({ x, z, y: h - s * 0.15, s });
-    // small satellites
+    // 小块的伴生石
     for (let k = 0; k < 3 && out.length < count; k++) {
       const ox = x + (rand() - 0.5) * s * 4, oz = z + (rand() - 0.5) * s * 4;
       const ss = s * (0.25 + rand() * 0.35);
@@ -297,8 +293,8 @@ function placeRocks(count, rand) {
   return out;
 }
 
-// Per shore-map texel the two rocks whose influence reaches it (index into uRockData,
-// -1 = none), ranked by distance in radii; uRockData holds centre xz and radius
+// 对海岸贴图的每个纹素，记录影响能到达它的两块礁石（uRockData 的下标，
+// -1 表示没有），按以半径归一化的距离排序；uRockData 保存中心 xz 与半径
 function rockMaps(rocks, extent, size = 512) {
   const data = new Float32Array(rocks.length * 4);
   rocks.forEach((r, i) => data.set([r.x, r.z, r.r, 0], i * 4));
@@ -332,13 +328,13 @@ function rockMaps(rocks, extent, size = 512) {
 export function createTerrain({ sky, caustics, floatShadow, water, absorption, reflectionLayer = 1 }) {
   const uniforms = {
     ...floatShadow,
-    // shore maps + wave settings for the swash (same objects as the water's)
+    // 海岸贴图 + 上冲流用的波浪设置（与水面的同一批对象）
     ...Object.fromEntries(['uShore', 'uTravel', 'uSurf', 'uShoreExtent', 'uTime', 'uShoreWave', 'uSwellDir'].map((k) => [k, water[k]])),
     ...caustics,
     uSkyCube: { value: sky.cube },
     uAbsorption: { value: absorption },
     uSunDirT: { value: sky.sunDir },
-    uSunShadowMatrix: { value: new THREE.Matrix4() },   // the sun light's shadow.matrix (main.js)
+    uSunShadowMatrix: { value: new THREE.Matrix4() },   // 太阳光的 shadow.matrix（main.js）
     uCausticStrength: { value: 1.0 },
     uFogDensity: { value: 1 / 18000 },
   };
@@ -363,10 +359,10 @@ export function createTerrain({ sky, caustics, floatShadow, water, absorption, r
     else sc.set(s.s * (0.8 + rand() * 0.6), s.s * (0.5 + rand() * 0.5), s.s * (0.8 + rand() * 0.6));
     m.compose(new THREE.Vector3(s.x, s.y, s.z), qt.setFromEuler(e), sc);
     rocks.setMatrixAt(i, m);
-    // footprint where the (deformed unit sphere) rock meets the sand
+    // （变形后的单位球）礁石与沙面相交处的足迹半径
     s.r = 0.95 * (sc.x + sc.z) / 2;
   });
-  // rocks the waves and swash run into (the surf rock has its own treatment in the water)
+  // 波浪与上冲流会撞上的礁石（拍岸礁石在水中另有专门处理）
   const shoreRocks = spots.filter((s) => !s.hero && islandHeight(s.x, s.z) > -3 && islandHeight(s.x, s.z) < 2.5);
   Object.assign(uniforms, rockMaps(shoreRocks, water.uShoreExtent.value));
   rocks.computeBoundingSphere();

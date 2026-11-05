@@ -1,9 +1,8 @@
 import * as THREE from 'three';
 
-// Sharp sun shadows of the floating props only: a depth map from an ortho sun camera
-// fitted around the bodies every frame, so the big static sun map (terrain + rocks) is
-// never re-rendered for them. Water, terrain, props and the underwater shafts all take
-// it through floatShadow().
+// 只为漂浮道具生成的锐利太阳阴影：每帧根据刚体范围拟合的正交太阳相机
+// 渲染出的深度贴图，这样大而静态的太阳阴影贴图（地形 + 岩石）就不必为它们
+// 重新渲染。水面、地形、道具和水下光束都通过 floatShadow() 取用它。
 export const FLOAT_SHADOW_GLSL = /* glsl */`
 uniform highp sampler2DShadow uFloatShadow;
 uniform mat4 uFloatShadowMatrix;
@@ -20,7 +19,7 @@ const _c = new THREE.Vector3();
 export class FloaterShadow {
   constructor(size = 1024) {
     const depth = new THREE.DepthTexture(size, size, THREE.FloatType);
-    depth.compareFunction = THREE.LessEqualCompare;   // hardware 2x2 PCF
+    depth.compareFunction = THREE.LessEqualCompare;   // 硬件 2x2 PCF
     depth.minFilter = depth.magFilter = THREE.LinearFilter;
     this.target = new THREE.WebGLRenderTarget(size, size, { format: THREE.RedFormat, depthTexture: depth, generateMipmaps: false });
     this.camera = new THREE.OrthographicCamera();
@@ -32,11 +31,11 @@ export class FloaterShadow {
     };
   }
 
-  // root: a Scene holding only the floaters; bodies: [{ pos, radius }]; sunDir: towards the sun
+  // root：只包含浮体的 Scene；bodies：[{ pos, radius }]；sunDir：指向太阳的方向
   update(renderer, root, bodies, sunDir) {
     const u = this.uniforms;
-    // the depth texture gets its compare mode when first rendered; until then any
-    // shadow sampler bound to it fails the draw
+    // 深度纹理在首次渲染时才获得比较模式；在此之前，任何绑定到它的
+    // 阴影采样器都会使绘制失败
     if (!this.ready) { this.clear(renderer); this.ready = true; }
     if (!bodies.length || sunDir.y <= 0.01) { u.uFloatShadowBias.value = 0; return; }
     _c.set(0, 0, 0);
@@ -44,8 +43,8 @@ export class FloaterShadow {
     _c.divideScalar(bodies.length);
     let r = 1;
     for (const b of bodies) r = Math.max(r, b.pos.distanceTo(_c) + b.radius);
-    // receivers lie along the light rays behind the casters, so the xy footprint is just
-    // the casters'; depth runs far past them for the seabed under a low sun
+    // 接收者位于投射者背后沿光线的方向上，因此 xy 覆盖范围就是投射者的
+    // 范围；深度范围远超它们，以便低太阳角度下覆盖到海底
     const cam = this.camera;
     cam.left = cam.bottom = -r;
     cam.right = cam.top = r;
