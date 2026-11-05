@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 
-// builds ship the licences of bundled npm packages (licenses.md) and of adapted code (THIRD_PARTY_NOTICES.md)
+// 构建产物会随附所用 npm 包的许可（licenses.md）以及改编代码的许可（THIRD_PARTY_NOTICES.md）
 export default defineConfig({
   build: { license: { fileName: 'licenses.md' } },
   plugins: [{

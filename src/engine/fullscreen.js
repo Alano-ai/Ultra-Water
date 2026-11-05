@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-// One big triangle covering the viewport; shared by every fullscreen pass.
+// 一个覆盖整个视口的大三角形；所有全屏渲染阶段共用。
 const geometry = new THREE.BufferGeometry();
 geometry.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);

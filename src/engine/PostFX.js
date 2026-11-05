@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 const LEVELS = 6;
-const METER = 32; // auto-exposure metering target is METER x METER
+const METER = 32; // 自动曝光的测光目标是 METER x METER
 
 const VERT = /* glsl */`
 in vec3 position;
@@ -18,12 +18,12 @@ in vec2 vUv;
 out vec4 fragColor;
 `;
 
-// 13-tap dual-filter downsample (CoD AW). With PREFILTER: clamp + soft knee per tap, Karis-weighted groups.
+// 13 抽头的双滤波降采样（CoD AW）。启用 PREFILTER 时：逐抽头做钳制 + 软拐点，并做 Karis 加权分组。
 const DOWN = /* glsl */`
 uniform sampler2D tSrc;
-uniform vec2 uTexel; // source texel size
+uniform vec2 uTexel; // 源纹素尺寸
 #ifdef PREFILTER
-uniform vec4 uCurve; // threshold-knee, 2*knee, 0.25/knee, threshold
+uniform vec4 uCurve; // 阈值-拐点、2*knee、0.25/knee、阈值
 uniform float uClamp;
 #endif
 
@@ -32,7 +32,7 @@ float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 vec3 tap(vec2 o) {
   vec3 c = texture(tSrc, vUv + o * uTexel).rgb;
 #ifdef PREFILTER
-  c = max(c, 0.0); // negatives (and NaN on most GPUs) -> 0
+  c = max(c, 0.0); // 负值（以及多数 GPU 上的 NaN）-> 0
   float l = max(luma(c), 1e-4);
   c *= min(1.0, uClamp / l);
   l = min(l, uClamp);
@@ -61,10 +61,10 @@ void main() {
   fragColor = vec4(r, 1.0);
 }`;
 
-// 9-tap tent upsample; blended additively onto the finer level.
+// 9 抽头的帐篷滤波上采样；以加法混合叠加到更细的一级上。
 const UP = /* glsl */`
 uniform sampler2D tSrc;
-uniform vec2 uTexel; // source (coarser) texel size
+uniform vec2 uTexel; // 源（更粗的一级）纹素尺寸
 void main() {
   vec4 d = uTexel.xyxy * vec4(1.0, 1.0, -1.0, 0.0);
   vec3 s = texture(tSrc, vUv - d.xy).rgb + texture(tSrc, vUv - d.wy).rgb * 2.0 + texture(tSrc, vUv - d.zy).rgb
@@ -73,9 +73,9 @@ void main() {
   fragColor = vec4(s * (1.0 / 16.0), 1.0);
 }`;
 
-// Auto-exposure 1/2: HDR -> METERxMETER of log2(luminance). 4x4 bilinear taps per texel over its footprint,
-// the grid jittered per frame (the temporal filter averages it out). Luminance is clamped to [1e-4, 64]
-// before the log so the sun disc / glints can't pump exposure; the mean is taken in log space anyway.
+// 自动曝光 1/2：HDR -> METERxMETER 的 log2(亮度)。每个纹素在其覆盖范围内做 4x4 次双线性采样，
+// 网格逐帧抖动（由时域滤波平均掉）。在取对数之前把亮度钳制到 [1e-4, 64]，
+// 这样太阳圆盘 / 闪光就不会让曝光来回波动；而均值本来就是在 log 空间里求的。
 const METER_FRAG = /* glsl */`
 uniform sampler2D tSrc;
 uniform vec2 uJitter; // [0,1)^2
@@ -89,13 +89,13 @@ void main() {
   fragColor = vec4(s * (1.0 / 16.0), 0.0, 0.0, 1.0);
 }`;
 
-// Auto-exposure 2/2: METERxMETER -> 1x1 mean (16x16 bilinear taps, each = 2x2 texels), then temporal
-// adaptation in log2 space, ping-pong with the previous 1x1 state. r = adapted log2(avg luminance).
+// 自动曝光 2/2：METERxMETER -> 1x1 均值（16x16 次双线性采样，每次覆盖 2x2 个纹素），
+// 然后在 log2 空间做时域自适应，与上一帧的 1x1 状态乒乓交替。r = 自适应后的 log2(平均亮度)。
 const ADAPT_FRAG = /* glsl */`
-uniform sampler2D tSrc;  // metering target, linear filtered
-uniform sampler2D tPrev; // previous 1x1 state
-uniform vec2 uK;         // blend factor when scene brightens (x) / darkens (y); 1 = snap
-uniform vec2 uRange;     // allowed log2 luminance range (from min/max exposure)
+uniform sampler2D tSrc;  // 测光目标，线性过滤
+uniform sampler2D tPrev; // 上一帧的 1x1 状态
+uniform vec2 uK;         // 场景变亮（x）/ 变暗（y）时的混合系数；1 = 直接贴合
+uniform vec2 uRange;     // 允许的 log2 亮度范围（由最小 / 最大曝光得出）
 void main() {
   float sum = 0.0;
   for (int j = 0; j < 16; j++) for (int i = 0; i < 16; i++)
@@ -108,21 +108,21 @@ void main() {
   fragColor = vec4(s, 0.0, 0.0, 1.0);
 }`;
 
-// Same math as three's AgXToneMapping chunk (Filament/Blender AgX, iolite contrast approx).
+// 与 three.js 的 AgXToneMapping chunk 数学一致（Filament/Blender AgX，iolite 的对比度近似）。
 const COMP = /* glsl */`
 uniform sampler2D tHdr;
 uniform sampler2D tBloom;
-uniform sampler2D tExp;   // 1x1 adapted log2 average luminance
-uniform float uExposure;  // exposure compensation (auto) or absolute exposure
-uniform float uAuto;      // 1 = auto exposure
-uniform vec3 uExpo;       // keyValue, minExposure, maxExposure
+uniform sampler2D tExp;   // 1x1 的自适应 log2 平均亮度
+uniform float uExposure;  // 曝光补偿（自动曝光时）或绝对曝光
+uniform float uAuto;      // 1 = 自动曝光
+uniform vec3 uExpo;       // keyValue、minExposure、maxExposure
 uniform float uBloom;
-uniform vec2 uLook;       // AgX look: power (contrast), saturation
-uniform float uFrame;     // 0..255, dither seed
+uniform vec2 uLook;       // AgX 观感：幂次（对比度）、饱和度
+uniform float uFrame;     // 0..255，抖动种子
 uniform float uDroplets;  // 0..1
-uniform float uTime;      // seconds, wraps at 4096
-uniform float uAspect;    // width / height
-uniform float uResY;      // height in pixels
+uniform float uTime;      // 秒，到 4096 后回绕
+uniform float uAspect;    // 宽 / 高
+uniform float uResY;      // 高度（像素）
 
 const mat3 SRGB_TO_REC2020 = mat3(
   vec3(0.6274, 0.0691, 0.0164), vec3(0.3293, 0.9195, 0.0880), vec3(0.0433, 0.0113, 0.8956));
@@ -148,7 +148,7 @@ vec3 agx(vec3 c) {
   c = AGX_INSET * (SRGB_TO_REC2020 * c);
   c = clamp((log2(max(c, 1e-10)) - AGX_MIN_EV) / (AGX_MAX_EV - AGX_MIN_EV), 0.0, 1.0);
   c = agxContrast(c);
-  // AgX "punchy"-style look in the encoded domain
+  // 在编码域中模拟 AgX 的“punchy”风格观感
   c = pow(max(c, 0.0), vec3(uLook.x));
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   c = l + uLook.y * (c - l);
@@ -156,46 +156,46 @@ vec3 agx(vec3 c) {
   return clamp(REC2020_TO_SRGB * pow(max(c, 0.0), vec3(2.2)), 0.0, 1.0);
 }
 
-// Dave Hoskins hash without sine
+// Dave Hoskins 的无正弦哈希
 vec3 hash33(vec3 p) {
   p = fract(p * vec3(0.1031, 0.1030, 0.0973));
   p += dot(p, p.yxz + 33.33);
   return fract((p.xxy + p.yxx) * p.zyx);
 }
 
-// ---- lens droplets (only evaluated when uDroplets > 0) -----------------------------------------
-// All lengths are in screen-height units (p = vUv * vec2(aspect, 1)). Each drop is a tiny lens: the
-// image under it is sampled from the mirrored side of its centre, sample = centre - (K-1) * d, so it
-// looks inverted and slightly magnified, with a faint dark rim.
+// ---- 镜头水珠（仅在 uDroplets > 0 时求值） -----------------------------------------
+// 所有长度都以屏幕高度为单位（p = vUv * vec2(aspect, 1)）。每颗水珠都是一枚小透镜：
+// 其下方的图像从它中心的镜像一侧采样，sample = centre - (K-1) * d，因此看起来是倒像并略微放大，
+// 并带有一圈很淡的暗边。
 const float DROP_K = 1.8;
 
-// d: pixel - drop centre, r: radius. Returns (uv offset, darkening).
+// d：像素 - 水珠中心，r：半径。返回（uv 偏移，变暗量）。
 vec3 lensDrop(vec2 d, float r) {
   float dist = length(d);
-  float cov = clamp((r - dist) * uResY + 0.5, 0.0, 1.0); // 1px AA
+  float cov = clamp((r - dist) * uResY + 0.5, 0.0, 1.0); // 1px 抗锯齿
   if (cov <= 0.0) return vec3(0.0);
   return vec3(-d * DROP_K * cov, 0.22 * smoothstep(0.6, 1.0, dist / r) * cov);
 }
 
-// One drop (at most) per grid cell, kept inside its cell so only the own cell is tested.
+// 每个网格单元最多一颗水珠，且保持在本单元内，因此只需检测自身单元。
 vec3 dropLayer(vec2 p, float scale, float density, float seed) {
   vec2 q = p * scale + seed * 17.31;
   vec2 id = floor(q);
   vec3 h = hash33(vec3(id, seed)), g = hash33(vec3(id + 57.0, seed));
   if (h.x > density) return vec3(0.0);
-  float fade = clamp((uDroplets - g.x * 0.8) * 6.0, 0.0, 1.0); // drops dry up one by one (order = g.x)
-  float rf = mix(0.10, 0.24, h.y * h.y);                          // radius, cell units
+  float fade = clamp((uDroplets - g.x * 0.8) * 6.0, 0.0, 1.0); // 水珠逐个变干（顺序 = g.x）
+  float rf = mix(0.10, 0.24, h.y * h.y);                          // 半径，以单元为单位
   vec2 c = rf + vec2(h.z, g.y) * (1.0 - 2.0 * rf);
   return lensDrop((fract(q) - c) / scale, rf * fade / scale);
 }
 
-// A drop sliding down the lens, leaving a thin wet trail above it. speed in cycles/s.
-// Head enters above the screen and leaves below with its trail fully off-screen, so the wrap never pops.
+// 一颗沿镜头下滑的水珠，在其上方留下一条细细的湿痕。speed 的单位是周期 / 秒。
+// 珠体从屏幕上方进入、从下方离开，此时拖痕已完全移出屏幕，因此循环回绕时不会跳变。
 vec3 streak(vec2 p, float id, float speed, float amp) {
   const float R = 0.016, L = 0.45, W = 0.0035;
   float u = uTime * speed + id * 0.37;
   float cyc = mod(floor(u), 128.0), f = fract(u);
-  f += 0.012 * sin(f * 47.0); // stick-slip
+  f += 0.012 * sin(f * 47.0); // 黏滑（stick-slip）
   vec3 h = hash33(vec3(id, cyc, 5.1));
   float x0 = (0.08 + 0.84 * h.x) * uAspect;
   float hy = mix(1.0 + R, -R - L, f);
@@ -211,7 +211,7 @@ vec3 streak(vec2 p, float id, float speed, float amp) {
   return o;
 }
 
-// Returns (uv offset, darkening).
+// 返回（uv 偏移，变暗量）。
 vec3 droplets() {
   vec2 p = vUv * vec2(uAspect, 1.0);
   float sa = smoothstep(0.0, 0.4, uDroplets);
@@ -233,11 +233,11 @@ void main() {
   }
 
   vec3 c = (texture(tHdr, uv).rgb + texture(tBloom, uv).rgb * uBloom) * (ex * (1.0 - dark));
-  vec2 d = (vUv - 0.5) * 1.41421356; // |d|^2 = 1 at corners
+  vec2 d = (vUv - 0.5) * 1.41421356; // 四角处 |d|^2 = 1
   c = agx(c) * (1.0 - 0.08 * dot(d, d));
   vec3 o = mix(pow(c, vec3(1.0 / 2.4)) * 1.055 - 0.055, c * 12.92, vec3(lessThanEqual(c, vec3(0.0031308))));
 
-  // TPDF dither, +-1/255, after sRGB encoding and before the 8-bit store
+  // TPDF 抖动，+-1/255，在 sRGB 编码之后、写入 8 位之前
   vec3 n = hash33(vec3(gl_FragCoord.xy, uFrame)) + hash33(vec3(gl_FragCoord.xy, uFrame + 17.0));
   fragColor = vec4(o + (n - 1.0) * (1.0 / 255.0), 1.0);
 }`;
@@ -249,19 +249,19 @@ const mk = (frag, uniforms, defines = {}, extra = {}) => new THREE.RawShaderMate
 
 export class PostFX {
   params = {
-    // Exposure. autoExposure: `exposure` is a multiplier on the metered exposure (exposure compensation, 1 = neutral).
-    // !autoExposure: `exposure` is the absolute exposure, as before.
+    // 曝光。autoExposure 为真时：`exposure` 是对测光曝光的乘数（曝光补偿，1 = 中性）。
+    // !autoExposure 时：`exposure` 就是绝对曝光，与之前相同。
     exposure: 1.0,
     autoExposure: true,
-    // Metered exposure = keyValue / (log-average scene luminance). 0.18 puts the scene's geometric mean at
-    // middle grey, which this AgX look maps to ~0.46 sRGB. Tune: ~0.12 moodier/darker, ~0.3 airy/bright.
+    // 测光曝光 = keyValue /（场景亮度的对数平均）。0.18 把场景的几何均值放在
+    // 中灰处，经这套 AgX 观感映射到约 0.46 sRGB。调参：约 0.12 更压抑 / 更暗，约 0.3 更通透 / 更亮。
     keyValue: 0.18,
-    adaptUp: 2.5,    // adaptation rate (1/s) when the scene gets brighter (exposure falls); ~0.4 s time constant
-    adaptDown: 1.0,  // rate (1/s) when the scene gets darker (exposure rises); ~1 s time constant
-    minExposure: 0.05, // metered exposure clamp (linear multipliers, ~ -4.3 .. +4.3 EV around 1)
+    adaptUp: 2.5,    // 场景变亮（曝光下降）时的自适应速率（1/s）；时间常数约 0.4 s
+    adaptDown: 1.0,  // 场景变暗（曝光上升）时的速率（1/s）；时间常数约 1 s
+    minExposure: 0.05, // 测光曝光的钳制范围（线性乘数，相对 1 约为 -4.3 .. +4.3 EV）
     maxExposure: 20.0,
     bloomStrength: 0.06, bloomThreshold: 1.0, bloomClamp: 64.0, contrast: 1.12, saturation: 1.3,
-    droplets: 0.0, // 0..1 lens water droplets; 0 costs nothing
+    droplets: 0.0, // 0..1 的镜头水珠；为 0 时没有额外开销
   };
 
   constructor(renderer) {
@@ -290,7 +290,7 @@ export class PostFX {
       uFrame: { value: 0 }, uDroplets: { value: 0 }, uTime: { value: 0 }, uAspect: { value: 1 }, uResY: { value: 1 },
     });
 
-    // levels[i] is 1/2^(i+1) of the input; texel[0] is the HDR input, texel[i+1] is levels[i]
+    // levels[i] 是输入的 1/2^(i+1)；texel[0] 是 HDR 输入，texel[i+1] 对应 levels[i]
     this.levels = [];
     this.texel = [new THREE.Vector2()];
     for (let i = 0; i < LEVELS; i++) {
@@ -303,7 +303,7 @@ export class PostFX {
       this.texel.push(new THREE.Vector2());
     }
 
-    // auto exposure: METERxMETER log-luminance target, then a 1x1 float ping-pong holding the adapted value
+    // 自动曝光：METERxMETER 的 log 亮度目标，再用 1x1 浮点乒乓纹理保存自适应后的值
     this.meterRT = new THREE.WebGLRenderTarget(METER, METER, {
       type: THREE.HalfFloatType, format: THREE.RGBAFormat,
       minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
@@ -315,8 +315,8 @@ export class PostFX {
       minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
       depthBuffer: false, stencilBuffer: false, generateMipmaps: false,
     }));
-    this._cur = 0;      // adapt[_cur] holds the latest state
-    this._snap = true;  // next metered frame replaces the state instead of easing to it
+    this._cur = 0;      // adapt[_cur] 保存最新状态
+    this._snap = true;  // 下一次测光时直接替换状态，而不是缓动过去
     this._frame = 0;
     this._time = 0;
 
@@ -328,7 +328,7 @@ export class PostFX {
     let w = Math.max(1, Math.floor(width)), h = Math.max(1, Math.floor(height));
     this.matComp.uniforms.uAspect.value = w / h;
     this.matComp.uniforms.uResY.value = h;
-    this._snap = true; // new framebuffer: re-meter instantly
+    this._snap = true; // 新建帧缓冲：立即重新测光
     this.texel[0].set(1 / w, 1 / h);
     for (let i = 0; i < LEVELS; i++) {
       w = Math.max(1, Math.floor(w / 2));
@@ -350,14 +350,14 @@ export class PostFX {
     this._pass(mat, target);
   }
 
-  // Two tiny passes: HDR -> 32x32 log2 luminance -> 1x1 mean + temporal adaptation (all on the GPU).
+  // 两个很小的渲染阶段：HDR -> 32x32 的 log2 亮度 -> 1x1 均值 + 时域自适应（全部在 GPU 上完成）。
   _meterExposure(hdr, dt) {
     const p = this.params, m = this.matMeter.uniforms, a = this.matAdapt.uniforms, f = this._frame;
     m.tSrc.value = hdr;
-    m.uJitter.value.set((f * 0.7548776662466927) % 1, (f * 0.5698402909980532) % 1); // R2 sequence
+    m.uJitter.value.set((f * 0.7548776662466927) % 1, (f * 0.5698402909980532) % 1); // R2 序列
     this._pass(this.matMeter, this.meterRT);
 
-    // keep the state inside the range the exposure clamp can actually show, so it never "winds up"
+    // 把状态保持在曝光钳制真正能呈现的范围内，避免它“越积越偏”
     const key = Math.max(p.keyValue, 1e-4), lo = Math.max(Math.min(p.minExposure, p.maxExposure), 1e-4), hi = Math.max(p.minExposure, p.maxExposure, 1e-4);
     a.tSrc.value = this.meterRT.texture;
     a.tPrev.value = this.adapt[this._cur].texture;
@@ -370,23 +370,23 @@ export class PostFX {
 
   render(hdrTexture, dt = 1 / 60) {
     const r = this.renderer, p = this.params, L = this.levels, T = this.texel;
-    dt = dt > 0 ? Math.min(dt, 1) : 0; // also catches NaN
+    dt = dt > 0 ? Math.min(dt, 1) : 0; // 同时也能挡掉 NaN
     this._frame = (this._frame + 1) & 255;
     this._time = (this._time + dt) % 4096;
 
     const prevTarget = r.getRenderTarget(), prevClear = r.autoClear, prevReset = r.info.autoReset;
     r.autoClear = false;
-    r.info.autoReset = false; // keep scene stats; our passes would otherwise wipe them
+    r.info.autoReset = false; // 保留场景统计；否则我们的渲染阶段会把它们清掉
 
     if (p.autoExposure) this._meterExposure(hdrTexture, dt);
-    else this._snap = true; // state goes stale while off: snap when it comes back
+    else this._snap = true; // 关闭期间状态会过期：重新开启时直接贴合
 
     const th = p.bloomThreshold, knee = Math.max(th * 0.5, 1e-4);
     const pre = this.matPre.uniforms;
     pre.uCurve.value.set(th - knee, 2 * knee, 0.25 / knee, th);
     pre.uClamp.value = p.bloomClamp;
 
-    if (p.bloomStrength > 0) {   // off, the composite scales the stale chain by 0
+    if (p.bloomStrength > 0) {   // 关闭时，合成阶段会把这条陈旧的链按 0 缩放
       this._blit(this.matPre, hdrTexture, T[0], L[0]);
       for (let i = 1; i < LEVELS; i++) this._blit(this.matDown, L[i - 1].texture, T[i], L[i]);
       for (let i = LEVELS - 2; i >= 0; i--) this._blit(this.matUp, L[i + 1].texture, T[i + 2], L[i]);

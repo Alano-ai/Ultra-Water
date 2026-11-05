@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 
-// Mirror camera about the y=0 plane with an oblique near plane (Lengyel), rendering
-// into a half-res target cleared to alpha 0 so the water falls back to the sky cube
-// wherever nothing was drawn. Same math as three's Reflector, minus the mesh.
+// 以 y=0 平面镜像相机，并使用斜近裁剪面（Lengyel），渲染到半分辨率目标，
+// 该目标清为 alpha 0，这样在什么都没绘制的地方，水面会回退到天空立方体贴图。
+// 与 three.js 的 Reflector 数学相同，只是不含网格。
 const normal = new THREE.Vector3(0, 1, 0);
 const camPos = new THREE.Vector3();
 const lookAt = new THREE.Vector3();
@@ -17,7 +17,7 @@ export class PlanarReflection {
     this.camera = new THREE.PerspectiveCamera();
     this.camera.layers.set(layer);
     this.textureMatrix = new THREE.Matrix4();
-    // mipmapped: the water blurs it by its roughness
+    // 带 mipmap：水面按粗糙度对它做模糊
     this.target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
     this.scale = 0.5;
   }

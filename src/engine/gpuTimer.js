@@ -1,5 +1,5 @@
-// GPU timings via EXT_disjoint_timer_query_webgl2. Queries can't nest, so each
-// labelled section is begun/ended back-to-back; results arrive a few frames late.
+// GPU 计时基于 EXT_disjoint_timer_query_webgl2。查询不能嵌套，因此每个
+// 带标签的区段都是紧接着开始 / 结束；结果会晚几帧才回来。
 export class GpuTimer {
   constructor(gl) {
     this.gl = gl;
@@ -7,8 +7,8 @@ export class GpuTimer {
     this.pending = [];
     this.current = null;
     this.frame = null;
-    this.ms = {};       // smoothed ms per label
-    this.total = 0;     // smoothed sum of all labels
+    this.ms = {};       // 每个标签平滑后的毫秒数
+    this.total = 0;     // 所有标签平滑后的总和
   }
 
   get available() { return !!this.ext; }
@@ -35,7 +35,7 @@ export class GpuTimer {
     this.end();
     this.pending.push(this.frame);
     this.frame = null;
-    if (this.keep) return;     // benchmark: keep everything for drain()
+    if (this.keep) return;     // 基准测试：全部保留给 drain()
     const gl = this.gl;
     const disjoint = gl.getParameter(this.ext.GPU_DISJOINT_EXT);
     while (this.pending.length) {
@@ -52,11 +52,11 @@ export class GpuTimer {
       }
       if (!disjoint) this.total = this.total ? this.total * 0.95 + sum * 0.05 : sum;
     }
-    // ponytail: drop backlog if the GPU never reports (tab hidden etc.)
+    // ponytail: GPU 一直不回报时丢弃积压（标签页隐藏等）
     if (this.pending.length > 8) this.pending.splice(0, this.pending.length - 8).flat().forEach(({ q }) => gl.deleteQuery(q));
   }
 
-  // read every pending query (call after a GPU fence) -> mean ms per label per frame
+  // 读取所有待处理查询（在 GPU 同步围栏之后调用）-> 每个标签每帧的平均毫秒数
   drain() {
     const gl = this.gl, sums = {};
     const frames = this.pending.length;
