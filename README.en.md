@@ -11,6 +11,12 @@ npm run dev
 
 Open the printed localhost URL. Orbit with the mouse (or a finger: phones get their own profile, see [Phones and tablets](#phones-and-tablets)). It opens on the `Lagoon` shot. Pick others from the `camera` dropdown (they also set the sun). The performance panel (top left) shows the GPU, render size, fps, ms per frame and a 20 s graph. Its `Uncap FPS` button switches the loop off the display's refresh: frames then render back-to-back, with at most three in flight on the GPU, so the counter shows what the machine can do while the scene keeps running live. The screen still updates at its own rate. `Cap to display` switches back. `Run benchmark` (also `benchmark (uncapped)` in the settings) renders 300 frames back-to-back with the render loop paused and times them to GPU completion with a fence. The screen freezes for about a second while it runs, so it only runs when asked.
 
+## Rock assets for Blender / Unreal Engine
+
+[Download the complete rock asset pack](https://github.com/Alano-ai/Ultra-Water/releases/download/rocks-v1.0.0/UltraWater_Rocks_Blender_UE.zip) (about 104 MiB): all 91 editable rocks, individual FBX files, the original layout, GLB, 4K PBR textures, and an optional UE5 importer. A separate island reference mesh includes the integrated rocky ridges.
+
+See the [export and import guide](docs/rock-assets/README.md). Blender round-trip checks passed; importing into the UE editor has not been tested. Dynamic water effects are not included.
+
 ## Performance
 
 Measured with the in-page benchmark on an RTX 3060 (Chrome, ANGLE/D3D11), 4× MSAA, all features on, at 1954×1692 (3.3 MP, the pixel count of 1440p; `devicePixelRatio` 2 on the browser window):

@@ -1,0 +1,56 @@
+{
+  "blender_version": "5.2.3 LTS",
+  "ue_editor_tested": false,
+  "blend": {
+    "rocks": 91,
+    "unique_editable_meshes": 91,
+    "vertices_per_rock": 252,
+    "triangles_per_rock": 500,
+    "max_source_world_vertex_error_m": 1.5194240575056028e-05,
+    "nonmanifold_edges": 0,
+    "uv_sets_per_mesh": 2,
+    "packed_textures": 3,
+    "source_vertex_colors": true
+  },
+  "fbx_texture_references": {
+    "files": 92,
+    "resolved_relative_references": 552
+  },
+  "fbx_layout": {
+    "rocks": 91,
+    "max_source_bounds_error_m": 1.5143126915972971e-05,
+    "units_preserved": true
+  },
+  "individual_fbx": {
+    "files_imported": 91,
+    "bottom_center_pivots": true,
+    "max_source_bounds_error_m": 8.508676181406827e-07
+  },
+  "glb": {
+    "rocks": 91,
+    "triangles": 45500,
+    "max_source_bounds_error_m": 1.5143918403737189e-05
+  },
+  "terrain_reference": {
+    "meshes": 1,
+    "triangles": 134843
+  },
+  "status": "passed",
+  "textures": {
+    "size": [
+      4096,
+      4096
+    ],
+    "basecolor_srgb_encoded": true,
+    "srgb_reference_pixel": [
+      149,
+      144,
+      137
+    ],
+    "normal_conventions": [
+      "OpenGL",
+      "DirectX"
+    ]
+  },
+  "ue_import_script": "syntax checked; not executed in UE"
+}

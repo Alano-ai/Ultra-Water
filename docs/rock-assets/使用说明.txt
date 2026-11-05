@@ -1,0 +1,63 @@
+Ultra Water 石头模型导出包
+
+内容
+- UltraWater_Rocks.blend：Blender 可编辑源文件。每块石头有独立网格，可以进入编辑模式修改顶点；贴图已内嵌。
+  Asset_Catalog 场景：按网格排列，便于选取和编辑。
+  Original_Layout 场景：保留项目中全部 91 块石头的原始位置、形状和尺寸，海平面 Z=0。
+  Terrain_Reference 场景：完整岛屿参考网格，包含与地形一体的岩石山脊；仅参考纯色材质。
+- fbx_individual/：91 个独立 FBX（90 块岸边/伴生石 + SM_Rock_Hero 大礁石）。
+  每块的旋转和尺寸已烘焙进顶点，枢轴在底面中心，对象位于原点，适合导入 UE 反复摆放。
+- Rocks_OriginalLayout.fbx：全部石头，保留原始场景布局；通过 UE 的 Import Into Level 导入更适合恢复布局。
+- Rocks_OriginalLayout.glb：完整石头布局与内嵌通用 PBR 材质，作为交换格式备用。
+- textures/：共享 4096×4096 材质图集，UV0 使用每块石头自己的区域。每块另有独立的 UV1 光照展开。
+- reference/Island_Terrain_Reference.fbx：完整地形参考，含一体化岩石山脊；仅纯色材质，不是独立石头资产。
+- manifest.json：每块的名称、尺寸、枢轴位置、源几何与坐标约定。
+- Import_Into_UE.py：可选的 UE5 编辑器批量导入脚本，自动导入 91 个 FBX、连接材质并生成碰撞。
+
+在 Blender 中编辑
+1. 打开 UltraWater_Rocks.blend。
+2. 右上角切换场景，选择 Asset_Catalog 或 Original_Layout。
+3. 选中石头，Tab 进入编辑模式。两个场景中的同一块石头共用网格，编辑会同步。
+4. 需要自行调整平滑度时可添加细分修改器；导出网格保留源项目的密度：每块 252 顶点、500 三角面。
+
+导入 UE（手动，适合任何不支持 Python 脚本的项目）
+1. 将整个包解压到固定位置，保留 textures 与 fbx_individual 的相对目录。
+2. 导入 fbx_individual 中所需的 FBX。选择 Static Mesh，Import Uniform Scale=1，
+   Convert Scene=开，Convert Scene Unit=开，Force Front XAxis=关。
+   法线选择 Import Normals and Tangents，按需启用 Auto Generate Collision。
+3. 新建普通表面材质，将以下贴图连接：
+   T_Rock_BaseColor.png -> Base Color（sRGB=开）
+   T_Rock_Roughness.png 的 R 通道 -> Roughness（sRGB=关，压缩可选 Masks）
+   T_Rock_Normal_DirectX.png -> Normal（Normalmap 压缩，sRGB=关，Flip Green Channel=关）
+   Metallic=0。将材质分配给石头。
+   FBX 自动导入材质时不保证连接粗糙度，建议按上述步骤检查。
+4. 光照贴图坐标索引使用 UV1。文件已有 UV1，可关闭重新生成 Lightmap UV。
+5. 恢复布局时通过 File > Import Into Level 选择 Rocks_OriginalLayout.fbx。
+   普通 Content Browser 导入用于建立资产，不等同于恢复关卡中的原始实例位置。
+
+导入 UE（可选脚本）
+1. 启用 Python Editor Script Plugin 和 Editor Scripting Utilities，并按编辑器要求重启。
+2. 通过 Tools > Execute Python Script 运行本目录的 Import_Into_UE.py。
+3. 脚本创建 /Game/UltraWater_Rocks（如重名则递增目录名），导入独立石头、PBR 贴图和材质。
+   不修改当前关卡，也不导入参考地形。当前环境未安装 UE，脚本尚未在 UE 中实跑验证。
+   UE 版本间菜单位置和导入器可能不同；如脚本不可用，使用上面的手动导入方式。
+
+材质与限制
+- 几何和布局直接提取自原项目 createTerrain()，未重新生成另一套近似石头。
+- 91 块是同一源网格经不同缩放/旋转产生的实例，并非 91 种独立雕刻；导出后每块均可独立编辑。
+- 颜色、静态湿带、潮间带藻色、盐渍、粗糙度按原网页公式进行静态采样。
+- 程序化颗粒凹凸转换为通用切线空间法线近似；Blender/GLB 用 OpenGL，UE 手动材质用 DirectX。
+- 原始裂缝 AO 顶点色保存在 Blender/FBX 的 Source_Crevice_AO 中，通用材质不额外叠乘。
+- 浪花、波浪湿润变化、水下吸收、动态焦散及原网页的光照/雾不属于石头网格，不随本包迁移。
+- 地形参考为整块原始网格，保留山脊的几何形状，不包含原网页的生物群系材质。
+- Blender 文件由 Blender 5.2.3 保存；旧版 Blender 如无法打开，可导入 FBX/GLB。
+- FBX 和 GLB 已在 Blender 中回读检查；未在 UE 编辑器内执行导入测试。详见 validation.json。
+
+来源与许可
+源项目为 MIT，LICENSE、THIRD_PARTY_NOTICES.md 及 three.js LICENSE 随包附带。
+重新导出：在原项目中执行 node tools/export_rocks.mjs。
+
+官方参考
+FBX 静态网格与材质导入：https://dev.epicgames.com/documentation/en-us/unreal-engine/fbx-static-mesh-pipeline-in-unreal-engine
+导入选项：https://dev.epicgames.com/documentation/unreal-engine/fbx-import-options-reference-in-unreal-engine
+UE Python AssetImportTask：https://dev.epicgames.com/documentation/en-us/unreal-engine/python-api/class/AssetImportTask?application_version=5.4
