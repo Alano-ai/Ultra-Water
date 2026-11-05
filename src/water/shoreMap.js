@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 
-// Bakes (height, signed coast distance, ∇sdf.x, ∇sdf.z) into one float texture.
-// sdf > 0 offshore, < 0 on land, in metres. Exact EDT (Felzenszwalb) then a light
-// blur so the gradient doesn't flip hard along medial axes in bays.
-// Plus `travel`: (tau, dir.x, dir.z, shoal), same size/extent mapping, see bakeTravel():
-//   tau   s    shallow-water travel time from the coastline (> 0 offshore, < 0 on land)
-//   dir   unit propagation direction towards the shore, -grad(tau)/|grad(tau)| (0 where undefined)
-//   shoal      amplitude factor: Green's law * ray-tube convergence, clamped to [0.3, 2.5]
-// Shore waves: phase = omega * (tau + t), local k = omega / sqrt(g * clamp(depth, 0.3, 14)).
+// 把（高度、带符号海岸距离、∇sdf.x、∇sdf.z）烘焙进一张浮点纹理。
+// sdf > 0 为外海，< 0 为陆地，单位为米。先用精确 EDT（Felzenszwalb），再做轻微模糊，
+// 以免梯度在湾内的中轴线上硬翻转。
+// 另外还有 `travel`：（tau, dir.x, dir.z, shoal），尺寸/范围映射相同，见 bakeTravel()：
+//   tau   s    从海岸线算起的浅水传播时间（> 0 在外海，< 0 在陆地）
+//   dir   指向岸边的单位传播方向，-grad(tau)/|grad(tau)|（未定义处为 0）
+//   shoal      振幅因子：Green 定律 * 射线管汇聚，钳制到 [0.3, 2.5]
+// 海岸波：phase = omega * (tau + t)，局部 k = omega / sqrt(g * clamp(depth, 0.3, 14))。
 
 const INF = 1e20;
 
@@ -26,7 +26,7 @@ function edt1d(f, n, d, v, z) {
   }
 }
 
-// squared distance (texels) from every texel to the nearest texel where mask is true
+// 每个 texel 到最近的 mask 为真的 texel 的平方距离（单位：texel）
 function edt2d(mask, size) {
   const out = new Float64Array(size * size);
   for (let i = 0; i < out.length; i++) out[i] = mask[i] ? 0 : INF;
@@ -44,10 +44,10 @@ function edt2d(mask, size) {
   return out;
 }
 
-// module-level (not per-call) so optimised callers keep a stable call target
+// 模块级定义（而非每次调用内联），使被优化的调用方保持稳定的调用目标
 const clampi = (x, hi) => (x < 0 ? 0 : x > hi ? hi : x);
 
-// separable box blur, clamp-to-edge, running sums
+// 可分离盒式模糊，边缘钳制，滑动求和
 function boxBlur(src, size, r) {
   const tmp = new Float32Array(src.length), dst = new Float32Array(src.length), w = 2 * r + 1, hi = size - 1;
   for (let y = 0; y < size; y++) {
@@ -72,24 +72,24 @@ function floatTex(data, size) {
   return tex;
 }
 
-// --- wave travel-time field ------------------------------------------------------
-// tau = seconds a shallow-water front needs from the coastline to here: eikonal
-// |grad tau| = 1/c, c = sqrt(g * clamp(depth, DMIN, DMAX)), solved unsigned on both sides
-// of the coast by fast sweeping (first-order Godunov, Gauss-Seidel in 4 orders) and
-// negated on land, so tau stays smooth across the waterline. Seeded at sub-texel
-// accuracy from where the bilinear height crosses 0 between neighbouring texels.
-// ponytail: first-order upwind, fronts round to ~1 texel (3.5 m) and the 1/sqrt(depth)
-// singularity at the waterline is under-resolved (tau a few 0.1 s early there, roughly
-// uniformly); a 2nd-order sweep or a finer near-shore grid if that ever shows.
-// One small function per pass: V8 OSR-compiles the hot loop of each and would
-// otherwise deopt every time a big function reaches a loop it hasn't run yet.
+// --- 波浪传播时间场 -------------------------------------------------------------
+// tau = 浅水锋面从海岸线到此处所需的秒数：程函方程
+// |grad tau| = 1/c，c = sqrt(g * clamp(depth, DMIN, DMAX))，在海岸两侧以无符号方式
+// 用快速扫描法求解（一阶 Godunov，4 个顺序的 Gauss-Seidel），并在陆地上取负，
+// 使 tau 跨过水线时保持平滑。种子取自双线性高度在相邻 texel 之间穿过 0 的位置，
+// 精度达到亚 texel。
+// ponytail：一阶迎风，锋面圆化约 1 texel（3.5 m），水线处的 1/sqrt(depth)
+// 奇点分辨不足（该处 tau 偏早零点几秒，且大致均匀）；若日后显现，
+// 再改用二阶扫描或更细的近岸网格。
+// 每趟扫描用一个独立的小函数：V8 会为各自的热循环做 OSR 编译，否则大函数
+// 每次进入尚未运行过的循环都会去优化。
 const GRAV = 9.81, DMIN = 0.3, DMAX = 14;
-const ISLET = 64;              // land blobs smaller than this (texels) don't seed fronts
-const RAY_L = 50, RAY_STEP = 3, RAY_BAND = 300; // ray-tube window (m), march step (texels), offshore band (m)
-const KAPPA_MAX = 1 / 25;      // front curvature clamp, 1/m
+const ISLET = 64;              // 小于此值（texel）的陆地块不会播种锋面
+const RAY_L = 50, RAY_STEP = 3, RAY_BAND = 300; // 射线管窗口（m）、步进长度（texel）、外海带（m）
+const KAPPA_MAX = 1 / 25;      // 锋面曲率钳制，1/m
 
-// sea mask with small islets flooded: seeding them would ring them with bullseye
-// crests; as (clamped-shallow, slow) water they refract the passing fronts instead
+// 把小岛淹没后的海洋掩码：在小岛上播种会在其周围形成一圈同心圆状
+// 波峰；作为（被钳制为浅水、速度慢的）水体，它们反而会折射经过的锋面
 function wetMask(sea, size) {
   const n = size * size, wet = sea.slice(), seen = new Uint8Array(n), stack = new Int32Array(n), comp = new Int32Array(n);
   for (let s = 0; s < n; s++) {
@@ -113,11 +113,11 @@ function speeds(height, c, slow, texel) {
   for (let k = 0; k < c.length; k++) { c[k] = Math.sqrt(GRAV * Math.min(DMAX, Math.max(DMIN, -height[k]))); slow[k] = texel / c[k]; }
 }
 
-// T and open are padded by a 1-texel border ((size+2)^2, index k + 2j + size + 3;
-// T = Infinity, open = 2 there) so the sweep stencil needs no edge tests. Seeds: texels
-// with a 4-neighbour across the waterline get the distance to the crossing line from
-// the per-axis crossings dx, dy (texels): d = dx*dy / hypot(dx, dy). They are fixed
-// (open = 2); open = 1 marks cells to recompute, 0 settled ones.
+// T 与 open 外扩一圈 1 texel 的边界（(size+2)^2，索引 k + 2j + size + 3；
+// 该处 T = Infinity，open = 2），这样扫描模板无需做边界判断。种子：存在跨越
+// 水线的 4 邻居的 texel，用逐轴交点 dx、dy（texel）求出到穿越线的距离：
+// d = dx*dy / hypot(dx, dy)。种子固定不变（open = 2）；open = 1 标记待重算的
+// 单元，0 表示已收敛的单元。
 function seed(T, open, height, wet, slow, size) {
   const W = size + 2;
   open.fill(2);
@@ -136,8 +136,8 @@ function seed(T, open, height, wet, slow, size) {
   }
 }
 
-// one Gauss-Seidel pass in sweep order (di, dj). Locking: only open cells (a neighbour
-// changed since their last visit) are recomputed; a change reopens the 4 neighbours.
+// 按扫描顺序（di, dj）做一趟 Gauss-Seidel。加锁：只重算 open 单元
+// （自上次访问后邻居发生了变化）；一旦有变化就重新打开其 4 邻居。
 function pass(T, open, slow, size, di, dj) {
   const W = size + 2;
   let changed = 0;
@@ -148,7 +148,7 @@ function pass(T, open, slow, size, di, dj) {
       open[p] = 0;
       const l = T[p - 1], r = T[p + 1], u = T[p - W], v = T[p + W];
       const a = l < r ? l : r, b = u < v ? u : v, f = slow[k], d = a > b ? a - b : b - a;
-      // Infinity - Infinity = NaN fails both tests below, so unreached cells stay put
+      // Infinity - Infinity = NaN 会让下面两个判断都不成立，因此未到达的单元保持原值
       const t = d >= f ? (a < b ? a : b) + f : 0.5 * (a + b + Math.sqrt(2 * f * f - d * d));
       if (t < T[p] - 1e-4) {
         T[p] = t; changed++;
@@ -174,8 +174,8 @@ function signedTau(T, wet, size) {
   return tau;
 }
 
-// dir = -grad tau / |grad tau|; coherence |grad tau|*c ~ 1 on clean fronts, collapses
-// on shocks (where fronts from two coast stretches meet and the blur flattens the V)
+// dir = -grad tau / |grad tau|；相干度 |grad tau|*c 在干净锋面上 ~ 1，在激波处
+// 塌陷（两段海岸来的锋面在此相遇，模糊把 V 形抹平）
 function frontDir(tau, c, dirX, dirZ, coh, size, texel) {
   for (let j = 0; j < size; j++) {
     const jm = j > 0 ? -size : 0, jp = j < size - 1 ? size : 0;
@@ -190,8 +190,8 @@ function frontDir(tau, c, dirX, dirZ, coh, size, texel) {
   }
 }
 
-// front curvature kappa = div(grad tau / |grad tau|) = -div(dir), 1/m (> 0 off
-// headlands), clamped and zeroed on shocks so the ray-tube term stays smooth
+// 锋面曲率 kappa = div(grad tau / |grad tau|) = -div(dir)，单位 1/m（岬角外 > 0），
+// 做钳制并在激波处置零，使射线管项保持平滑
 function curvature(dirX, dirZ, coh, size, texel) {
   const kappa = new Float32Array(size * size);
   for (let j = 0; j < size; j++) {
@@ -205,11 +205,11 @@ function curvature(dirX, dirZ, coh, size, texel) {
   return kappa;
 }
 
-// ray-tube: G = int kappa e^(-s/L) ds marched offshore along the ray (-dir), amplitude
-// ~ tube width^-1/2 = exp(G/2); straight coast 1, headland > 1, bay < 1. Faded out
-// beyond RAY_BAND offshore. G is smooth, so it's marched on every other texel
-// (h x h grid, h = size >> 1, coarse (I, J) = fine (2I, 2J)) and upsampled in pack();
-// from just inland too, so the upsampling doesn't fade it at the waterline.
+// 射线管：G = int kappa e^(-s/L) ds，沿射线（-dir）向海侧步进，振幅
+// ~ 管宽^-1/2 = exp(G/2)；笔直海岸为 1，岬角 > 1，海湾 < 1。超出 RAY_BAND
+// 的外海侧淡出。G 是平滑的，所以每隔一个 texel 步进一次
+// （h x h 网格，h = size >> 1，粗网格 (I, J) 对应细网格 (2I, 2J)），在 pack() 中上采样；
+// 也从略偏内陆处起算，以免上采样在水线处把它淡掉。
 function rayTube(kappa, dirX, dirZ, sdf, size, texel) {
   const h = size >> 1, G = new Float32Array(h * h);
   const ds = RAY_STEP * texel, steps = Math.ceil(2.5 * RAY_L / ds);
@@ -233,10 +233,10 @@ function rayTube(kappa, dirX, dirZ, sdf, size, texel) {
   return G;
 }
 
-// (tau, dir.x, dir.z, shoal); shoal = Green's law (depth/DMAX)^-1/4 with the same depth
-// clamps as shoreWaves(), times the ray-tube factor exp(G/2) (G bilinear from h x h),
-// times the (blurred) front coherence: on shocks the dirs converge and Gerstner crests
-// would fold into vertical sheets, so the waves fade out there
+// (tau, dir.x, dir.z, shoal)；shoal = Green 定律 (depth/DMAX)^-1/4，水深钳制与
+// shoreWaves() 相同，乘以射线管因子 exp(G/2)（G 由 h x h 双线性插值），
+// 再乘以（模糊后的）锋面相干度：激波处方向会汇聚，Gerstner 波峰
+// 会叠成竖直的片状，因此该处的波淡出
 function pack(tau, dirX, dirZ, G, height, fade, size) {
   const h = size >> 1, data = new Float32Array(size * size * 4);
   for (let j = 0; j < size; j++) {
@@ -271,13 +271,13 @@ function bakeTravel(height, sea, sdf, size, texel) {
   return { travel: floatTex(data, size), travelData: data, surf: surfShelter(height, dirX, dirZ, sdf, size, texel) };
 }
 
-// --- surf shelter: how much of a breaker survives to here --------------------------
-// A wave that broke over a bar or reef keeps only ~0.42 x the shallowest depth it
-// crossed. Marching seaward along the ray (-dir), S = the shallowest depth found past a
-// deeper stretch (a bar behind a trough, a reef crest behind a lagoon); the monotone
-// shoaling climb up to here doesn't count, the local depth already caps that. Land after
-// a trough means fully sheltered (S = 0). Open beaches keep S = SMAX. The initial dry
-// stretch is skipped so points up the beach get their swash shelter too.
+// --- 拍岸浪遮蔽：碎浪有多少能存活到这里 ------------------------------------------
+// 在沙洲或礁石上破碎过的波，只保留其越过的最浅水深约 0.42 倍。
+// 沿射线（-dir）向海侧步进，S = 越过一段更深水域后找到的最浅水深
+// （波谷后的沙洲、潟湖后的礁脊）；到此处为止单调变浅的爬升不计入，
+// 局部水深本身已经封顶。波谷之后遇到陆地表示完全遮蔽（S = 0）。
+// 开阔沙滩保持 S = SMAX。开头尚未入水的一段会被跳过，
+// 这样沙滩上方的点也能得到上冲流遮蔽。
 const SMAX = 6, HYST = 0.3, S_STEP = 1.5, S_DEEP = 12;
 function surfShelter(height, dirX, dirZ, sdf, size, texel) {
   const S = new Float32Array(size * size).fill(SMAX), steps = Math.ceil(1500 / (S_STEP * texel));
@@ -303,7 +303,7 @@ function surfShelter(height, dirX, dirZ, sdf, size, texel) {
     }
     S[k] = Math.max(0, s);
   }
-  // blur: energy diffracts into the lee a little, and the gate shouldn't show texels
+  // 模糊：能量会稍微绕射进背风侧，而且闸门不应显出 texel
   const out = boxBlur(boxBlur(S, size, 2), size, 2);
   const tex = new THREE.DataTexture(out, size, size, THREE.RedFormat, THREE.FloatType);
   tex.minFilter = tex.magFilter = THREE.LinearFilter;
@@ -312,10 +312,10 @@ function surfShelter(height, dirX, dirZ, sdf, size, texel) {
   return tex;
 }
 
-// obstacle(x, z): optional extra height (e.g. a rock) raised into the bathymetry the wave
-// fronts travel over, so they refract round it and its lee is sheltered. The stored bed
-// height and the coastline sdf ignore it: the water round the rock keeps its real depth
-// (full chop, no breaker sheet wrapped over a dome) and no wave gap opens to the beach
+// obstacle(x, z)：可选的附加高度（例如一块礁石），叠加到锋面行经的水深之上，
+// 使锋面绕它折射、背风侧得到遮蔽。存储的海床高度与海岸线 sdf 都不含它：
+// 礁石周围的水保持真实水深（完整尖锐度，不会有碎浪面糊在穹顶上），
+// 也不会朝沙滩张开一条无波的空隙
 export function bakeShoreMap(heightFn, extent, size = 512, obstacle = null) {
   const texel = extent / size;
   const bed = new Float32Array(size * size), height = new Float32Array(size * size);
@@ -331,7 +331,7 @@ export function bakeShoreMap(heightFn, extent, size = 512, obstacle = null) {
   const toLand = edt2d(land, size), toSea = edt2d(sea, size);
   let sdf = new Float32Array(size * size);
   for (let k = 0; k < sdf.length; k++) {
-    // half-texel offset puts the zero crossing between land and sea texels
+    // 半 texel 偏移把零点穿越放在陆地与海洋 texel 之间
     sdf[k] = sea[k] ? (Math.sqrt(toLand[k]) - 0.5) * texel : -(Math.sqrt(toSea[k]) - 0.5) * texel;
   }
   sdf = boxBlur(boxBlur(sdf, size, 2), size, 2);

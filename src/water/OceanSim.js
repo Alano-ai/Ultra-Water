@@ -1,21 +1,21 @@
 import * as THREE from 'three';
 import { FullscreenQuad, rawPass } from '../engine/fullscreen.js';
 
-// Tessendorf FFT ocean: 4 cascades of 256² stacked in one 256×1024 atlas so every
-// IFFT stage is a single draw. Output per cascade (RGBA16F, mipmapped, repeat):
+// Tessendorf FFT 海洋：4 个 256² 级联堆叠在一张 256×1024 图集里，因此每个
+// IFFT 阶段都只需一次绘制。每个级联的输出（RGBA16F，带 mipmap，repeat）：
 //   displacement = (λDx, Dy, λDz, turbulence)   slope = (sx, sz, sx², sz²)
-// Slopes are divided out at full resolution so their mips give mean + second moment
-// (slope variance -> roughness, LEAN style).
+// 斜率在全分辨率下就完成除法归一，因此其 mip 给出均值 + 二阶矩
+// （斜率方差 -> 粗糙度，LEAN 风格）。
 
 export const N = 256;
 const LOG_N = 8;
-// last cascade is the gravity-capillary detail layer; 12/2.1 is non-integer so tiles don't align
+// 最后一个级联是重力-毛细波细节层；12/2.1 不是整数，因此平铺块不会对齐
 export const CASCADE_LENGTHS = [600, 85, 12, 2.1];
 const G = 9.81;
-// surface tension / density (m³/s²): ω² = g·k + (σ/ρ)·k³
+// 表面张力 / 密度（m³/s²）：ω² = g·k + (σ/ρ)·k³
 const SIGMA_RHO = 7.4e-5;
-// ω is quantised to multiples of 2π/LOOP and time wraps at LOOP, so the sim loops
-// seamlessly and fp32 phase never degrades.
+// ω 被量化为 2π/LOOP 的整数倍，时间在 LOOP 处回绕，因此模拟可无缝
+// 循环，且 fp32 相位永不退化。
 const LOOP = 300;
 
 const COMMON = /* glsl */`
@@ -30,11 +30,11 @@ float omega(float k) { return sqrt(G * k + ST * k * k * k); }
 `;
 
 const INIT_FRAG = COMMON + /* glsl */`
-uniform vec4 uSpecA[2]; // scale, angle, spreadBlend, swell
-uniform vec4 uSpecB[2]; // alpha, peakOmega, gamma, shortWavesFade
+uniform vec4 uSpecA[2]; // 缩放、角度、spreadBlend、涌浪
+uniform vec4 uSpecB[2]; // alpha、peakOmega、gamma、shortWavesFade
 uniform vec4 uLength;
-uniform vec4 uCut;      // c0 hi, c1 hi, c2 hi, -
-uniform float uCapFade; // short-wave fade for cascade 3 (cascades 0-2 use uSpecB.w)
+uniform vec4 uCut;      // c0 上限、c1 上限、c2 上限、-
+uniform float uCapFade; // 级联 3 的短波淡出（级联 0-2 使用 uSpecB.w）
 uniform uint uSeed;
 out vec4 outColor;
 
@@ -116,7 +116,7 @@ uniform float uTime;
 layout(location = 0) out vec4 out0;
 layout(location = 1) out vec4 out1;
 
-// two real fields packed as one complex spectrum: IFFT(A + iB) = a + ib
+// 两个实场打包为一个复频谱：IFFT(A + iB) = a + ib
 vec2 pack2(vec2 a, vec2 b) { return vec2(a.x - b.y, a.y + b.x); }
 
 void main() {
@@ -126,7 +126,7 @@ void main() {
   float kl = length(k);
   float ik = kl > 1e-6 ? 1.0 / kl : 0.0;
   const float W0 = 2.0 * PI / ${LOOP.toFixed(1)};
-  // ω = n·W0; phase reduced to [0, 2π) before sin/cos (the capillary cascade reaches ω ≈ 130)
+  // ω = n·W0；相位在 sin/cos 之前先归约到 [0, 2π)（毛细波级联的 ω 可达约 130）
   float ph = 2.0 * PI * fract(floor(omega(kl) / W0) * (uTime / ${LOOP.toFixed(1)}));
   vec2 e = vec2(cos(ph), sin(ph));
   vec4 h0 = texelFetch(uH0, p, 0);
@@ -141,11 +141,11 @@ void main() {
   out1 = vec4(pack2(dydx, dydz), pack2(dxdx, dzdz));
 }`;
 
-// Stockham radix-2 inverse FFT stage (e^{+i}); verified against a naive DFT.
+// Stockham 基 2 逆 FFT 阶段（e^{+i}）；已对照朴素 DFT 验证。
 const FFT_FRAG = COMMON + /* glsl */`
 uniform highp sampler2D uIn0;
 uniform highp sampler2D uIn1;
-uniform int uSub;      // sub-transform size 2..N
+uniform int uSub;      // 子变换长度 2..N
 uniform int uVertical;
 layout(location = 0) out vec4 out0;
 layout(location = 1) out vec4 out1;
@@ -180,7 +180,7 @@ layout(location = 1) out vec4 outSlope;
 void main() {
   ivec2 id = ivec2(gl_FragCoord.xy);
   ivec2 p = id + ivec2(0, uCascade * N);
-  // undo the centred-k frequency shift
+  // 撤销以 k 为中心的频率移位
   float s = ((id.x + id.y) & 1) == 0 ? 1.0 : -1.0;
   vec4 a = texelFetch(uIn0, p, 0) * s; // Dx, Dz, Dy, Dxz
   vec4 b = texelFetch(uIn1, p, 0) * s; // Dyx, Dyz, Dxx, Dzz
@@ -188,7 +188,7 @@ void main() {
   float jac = (1.0 + dxx) * (1.0 + dzz) - dxz * dxz;
   vec2 slope = b.xy / max(vec2(1.0 + dxx, 1.0 + dzz), vec2(0.2));
   float prev = texelFetch(uPrev, id, 0).w;
-  // foam follows the jacobian down instantly and recovers at a dt-based rate
+  // 泡沫随雅可比行列式瞬间下降，并按基于 dt 的速率恢复
   float turb = min(jac, prev + uDt * uFoamRecovery / max(jac, 0.5));
   outDisp = vec4(uLambda * a.x, a.z, uLambda * a.y, turb);
   outSlope = vec4(slope, slope * slope);
@@ -210,9 +210,9 @@ export const defaultOceanParams = () => ({
   windSwell: 0.25,
   gamma: 3.3,
   shortWavesFade: 0.04,
-  // cascade 3 only (calibration knob): 0.004 is the bare capillary spectrum, but its
-  // mean square slope (0.145) is 3x Cox-Munk for the whole sea and turns the water to
-  // brushed metal; 0.08 keeps fine ripples up close and the water glossy
+  // 仅级联 3（标定旋钮）：0.004 是纯毛细波谱，但其
+  // 均方斜率（0.145）对整个海面而言是 Cox-Munk 的 3 倍，会把水面变成
+  // 拉丝金属；0.08 让近处的细涟漪保留下来，水面保持光泽
   capillaryFade: 0.08,
   waveScale: 1,
   swellScale: 0.7,
@@ -239,8 +239,8 @@ export class OceanSim {
     };
     const H = N * CASCADE_LENGTHS.length;
     this.h0RT = new THREE.WebGLRenderTarget(N, H, fft);
-    // the 16 IFFT stages are bandwidth-bound; fp16 halves that, and its ~1e-3 relative
-    // error is about a millimetre of displacement on the largest cascade
+    // 16 个 IFFT 阶段受带宽限制；fp16 将其减半，其约 1e-3 的相对
+    // 误差在最大级联上约相当于一毫米的位移
     const half = { ...fft, type: THREE.HalfFloatType, count: 2 };
     this.ping = new THREE.WebGLRenderTarget(N, H, half);
     this.pong = new THREE.WebGLRenderTarget(N, H, half);
@@ -252,7 +252,7 @@ export class OceanSim {
     };
     this.out = CASCADE_LENGTHS.map(() => [new THREE.WebGLRenderTarget(N, N, out), new THREE.WebGLRenderTarget(N, N, out)]);
 
-    // turbulence starts at 1 (no foam)
+    // turbulence 初值为 1（无泡沫）
     const prevClear = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
     renderer.setClearColor(0x000000, 1);
     for (const pair of this.out) for (const rt of pair) { renderer.setRenderTarget(rt); renderer.clear(true, false, false); }
@@ -264,7 +264,7 @@ export class OceanSim {
       uSpecA: { value: [new THREE.Vector4(), new THREE.Vector4()] },
       uSpecB: { value: [new THREE.Vector4(), new THREE.Vector4()] },
       uLength: { value: lengths },
-      // cascade c owns [cut[c-1], cut[c]); each cut sits at 6 fundamentals of the next cascade
+      // 级联 c 拥有区间 [cut[c-1], cut[c])；每个 cut 位于下一级联的 6 个基频处
       uCut: { value: new THREE.Vector4(...CASCADE_LENGTHS.slice(1).map((L) => (2 * Math.PI / L) * 6), 0) },
       uCapFade: { value: 0 },
       uSeed: { value: 1337 },

@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import { FullscreenQuad, rawPass } from '../engine/fullscreen.js';
 import { WATER_GLSL } from './OceanSurface.js';
 
-// GPU -> CPU water surface queries. Each frame the caller submits world xz points; one
-// tiny pass evaluates exactly the surface the water mesh draws (FFT + shore waves,
-// choppy displacement inverted) and the result is read back asynchronously through a
-// PBO, so it never stalls the GPU. Results lag 1-3 frames, fine for buoyancy.
+// GPU -> CPU 水面查询。每帧调用方提交世界坐标 xz 点；一个
+// 极小的渲染阶段精确求值水面网格所绘制的水面（FFT + 海岸波浪，
+// 尖锐度位移已反解），结果通过 PBO 异步回读，
+// 因此绝不会让 GPU 停顿。结果滞后 1-3 帧，对浮力而言足够。
 const FRAG = /* glsl */`
 precision highp float;
 precision highp int;
@@ -29,15 +29,15 @@ export class WaterQuery {
     });
     this.quad = new FullscreenQuad(rawPass(FRAG, { ...surface.uniforms, uQueries: { value: this.input } }));
     this.inFlight = 0;
-    // latest completed read: (height, dispX, dispZ, 1) per point, plus what was asked
+    // 最近一次完成的回读：每个点的 (height, dispX, dispZ, 1)，以及当时请求的内容
     this.result = new Float32Array(capacity * 4);
     this.resultCount = 0;
     this.resultTag = -1;
     this.resultTime = 0;
   }
 
-  // xz: Float32Array of x,z pairs. tag identifies the point layout (ignored results
-  // from an old layout are the caller's job to detect).
+  // xz：x,z 对的 Float32Array。tag 标识点的排布（旧排布产生的
+  // 被忽略的结果由调用方自行检测）。
   submit(xz, count, tag, time) {
     if (this.inFlight >= 2 || count === 0) return;
     count = Math.min(count, this.capacity);

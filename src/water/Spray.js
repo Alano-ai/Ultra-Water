@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { WATER_GLSL, SWASH_GLSL } from './OceanSurface.js';
 
-// Breaker spray, fully stateless: each instance is an emitter in the surf zone. The
-// vertex shader evaluates the same shore-wave train the surface uses; when a breaking
-// crest passes the emitter it throws a puff forward and up (ballistic with drag), so
-// spray curtains follow the actual crest lines with no CPU work or simulation state.
+// 碎浪水花，完全无状态：每个实例都是拍岸浪区内的一个发射器。顶点着色器
+// 求值水面所用的同一组海岸波；破碎的波峰经过发射器时，它向前上方抛出一团
+// 水花（带阻力的弹道运动），于是水花幕随真实波峰线移动，无需 CPU 计算
+// 或模拟状态。
 const VERT_COMMON = /* glsl */`
 precision highp float;
 ${WATER_GLSL}
@@ -12,7 +12,7 @@ uniform vec3 uSunDir;
 uniform vec3 uSunColor;
 uniform samplerCube uSkyCube;
 uniform float uSkyMaxLod;
-uniform vec3 uSpray;        // amount, size, max distance
+uniform vec3 uSpray;        // 数量、尺寸、最大距离
 uniform vec2 uResolution;
 out vec2 vUv;
 out float vCov;
@@ -21,11 +21,11 @@ out vec3 vLight;
 out float vSeed;
 out float vViewZ;
 
-// camera-facing quad of the given size at p; droplets: strong forward scattering of the
-// sun + sky ambient
+// 在 p 处生成给定尺寸的面向相机四边形；水滴：太阳的强前向散射
+// + 天空环境光
 void billboard(vec3 p, float size) {
-  // at least a pixel and a half across: a smaller droplet only flickers on and off as it
-  // crosses pixel centres, so it's drawn larger and fainter instead
+  // 至少横跨一个半像素：更小的水滴只会在跨过像素中心时忽亮忽灭，
+  // 因此改为画得更大更淡
   float px = size * projectionMatrix[1][1] * uResolution.y * 0.5 / max(-(viewMatrix * vec4(p, 1.0)).z, 1e-3);
   vCov = min(px * px / 2.25, 1.0);
   size *= max(1.5 / px, 1.0);
@@ -44,11 +44,11 @@ void billboard(vec3 p, float size) {
 `;
 
 const VERT = VERT_COMMON + /* glsl */`
-in vec4 aEmit;              // emitter xz, two randoms
+in vec4 aEmit;              // 发射器 xz、两个随机数
 
 void main() {
   vAlpha = 0.0;
-  gl_Position = vec4(2.0, 2.0, 2.0, 1.0);   // dead instances fall outside the clip volume
+  gl_Position = vec4(2.0, 2.0, 2.0, 1.0);   // 失效实例落到裁剪体之外
   vec2 e = aEmit.xy;
   float r1 = aEmit.z, r2 = aEmit.w;
   vec2 toE = e - cameraPosition.xz;
@@ -56,17 +56,17 @@ void main() {
 
   Shore s = shoreWaves(e, shoreSample(e), 0.0);
   float a = s.wave0.x, k = s.wave0.y, w = s.wave0.z;
-  // only real breakers throw spray; the small spills over bars and in the lagoon would
-  // dot every crest with blobs
+  // 只有真正的碎浪才抛出水花；沙洲上和潟湖里的小规模溅溢
+  // 会在每道波峰上点出一串斑块
   float strength = s.breaking0 * smoothstep(0.25, 0.55, a);
   if (strength <= 0.01) return;
-  // seconds since the crest passed this emitter, staggered per particle
+  // 波峰经过此发射器后经过的秒数，按粒子错开
   float psi = mod(s.wave0.w + PI, 2.0 * PI) - PI;
   float age = psi / w - r1 * 0.3;
   float life = 0.9 + 1.5 * r2;
   if (age < 0.0 || age > life) return;
 
-  // thrown with the crest (towards the beach) and up, slowed by air drag
+  // 随波峰（朝向沙滩）向上抛出，并受空气阻力减速
   const float KD = 1.7, G = 9.81;
   float ex = (1.0 - exp(-KD * age)) / KD;
   float c = w / k;
@@ -81,11 +81,11 @@ void main() {
   vSeed = r1;
   vAlpha = strength * uSpray.x * smoothstep(0.0, 0.12, age) * pow(1.0 - age / life, 1.5)
          * smoothstep(-0.3, 0.2, y) * smoothstep(uSpray.z, uSpray.z * 0.7, sqrt(dot(toE, toE)))
-         * smoothstep(2.5, 10.0, vViewZ);   // no giant blobs on the lens
+         * smoothstep(2.5, 10.0, vViewZ);   // 镜头上不出现巨大斑块
 }`;
 
-// Splash crowns where props hit the water: each instance belongs to one impact slot
-// (WATER_GLSL's uImpact) and is thrown up and out from the rim, ballistic with drag.
+// 浮体撞入水面处的溅水冠：每个实例属于一个撞击槽位
+// （WATER_GLSL 的 uImpact），从边缘向上向外抛出，带阻力的弹道运动。
 const SPLASH_PER_IMPACT = 160;
 const SPLASH_VERT = VERT_COMMON + /* glsl */`
 void main() {
@@ -113,13 +113,13 @@ void main() {
          * smoothstep(-0.2, 0.1, y) * smoothstep(1.0, 4.0, vViewZ);
 }`;
 
-// Rocks the waves run into: each instance sits on the seaward side of one rock. When a
-// shore wave crest (rocks standing in water) or the swash front (rocks on the beach)
-// reaches its foot, it is thrown up the face and back off it, ballistic with drag, so the
-// water visibly stops against the rock instead of sliding past it.
+// 波浪撞上的礁石：每个实例位于一块礁石的向海侧。当海岸波峰
+// （立在水中的礁石）或上冲流锋面（位于沙滩上的礁石）
+// 到达其脚部时，会被沿石面向上抛再回落，带阻力的弹道运动，
+// 使水明显地撞停在礁石上，而不是从旁边滑过。
 const ROCK_SPLASH_PER_ROCK = 128;
 const ROCK_VERT = VERT_COMMON + SWASH_GLSL + /* glsl */`
-in vec4 aRock;              // centre xz, footprint radius, random
+in vec4 aRock;              // 中心 xz、底面半径、随机数
 
 void main() {
   vAlpha = 0.0;
@@ -132,15 +132,15 @@ void main() {
   vec4 sh = shoreSample(c);
   vec2 dir = shoreDir(sh, travelSample(c));
   if (dot(dir, dir) < 0.5) return;
-  // a point on the seaward half of the footprint, outward normal n
+  // 底面向海半侧的一点，外法线 n
   float ang = (r1 - 0.5) * 2.6;
   vec2 n = -vec2(dir.x * cos(ang) - dir.y * sin(ang), dir.x * sin(ang) + dir.y * cos(ang));
   vec2 e = c + n * rr * 1.08;
   float hb = shoreSample(e).x;
   float age, strength, y0, reach;
   if (hb > -0.3) {
-    // on the beach: the swash front reaching the foot of the rock, harder the further
-    // below its run-up height the foot is
+    // 沙滩上：上冲流锋面抵达礁石脚部，脚部低于爬高高度
+    // 越多，冲击越强
     Swash S = swashAt(e);
     float Rf = S.R * 2.1;
     float h = max(hb, 0.0);
@@ -151,7 +151,7 @@ void main() {
     y0 = h + 0.05;
     reach = 0.6;
   } else {
-    // in the surf: the crest slamming into it, harder where it breaks
+    // 拍岸浪中：波峰拍击礁石，破碎处更强
     Shore sw = shoreWaves(e, sh, 0.0);
     float a = sw.wave0.x;
     age = (mod(sw.wave0.w + PI, 2.0 * PI) - PI) / sw.wave0.z - r2 * 0.25;
@@ -163,7 +163,7 @@ void main() {
   if (strength <= 0.01 || age < 0.0 || age > life) return;
   const float KD = 1.6, G = 9.81;
   float ex = (1.0 - exp(-KD * age)) / KD;
-  // up the face, then falling back off it seawards and to the sides
+  // 先沿石面向上，再向海侧和两侧回落
   float vy = (2.0 + 4.0 * r3 * r3) * reach * strength;
   vec2 vh = n * (0.15 + 0.5 * r2) * reach + dir * 0.3;
   vec2 xz = e + vh * ex;
@@ -192,11 +192,11 @@ out vec4 fragColor;
 void main() {
   float r = length(vUv);
   if (vAlpha <= 0.0 || r > 1.0) discard;
-  // a cloud of droplets, not a smooth gaussian: whole soft puffs read as cotton balls
+  // 一团水滴，而非平滑的高斯分布：整块柔和的水花团看起来像棉球
   float n = texture(uFoamTex, vUv * 0.08 + vSeed * 17.0).r;
   float drops = smoothstep(0.35, 0.7, texture(uFoamTex, vUv * 0.3 + vSeed * 7.0).r);
   float a = vAlpha * vCov * exp(-3.5 * r * r) * (0.5 + n) * drops * 1.6;
-  // soft against the opaque scene (the water surface itself is handled by the depth test)
+  // 相对于不透明场景做柔和过渡（水面本身由深度测试处理）
   float d = texelFetch(uSceneDepth, ivec2(gl_FragCoord.xy), 0).r * 2.0 - 1.0;
   float sceneZ = 2.0 * uNearFar.x * uNearFar.y / (uNearFar.y + uNearFar.x - d * (uNearFar.y - uNearFar.x));
   a *= clamp((sceneZ - vViewZ) / 0.8, 0.0, 1.0);
@@ -210,7 +210,7 @@ function sampleEmitters(shore, count) {
   for (let tries = 0; n < count && tries < count * 400; tries++) {
     const i = Math.floor(rand() * size), j = Math.floor(rand() * size), k = (j * size + i) * 4;
     const depth = -data[k], sdf = data[k + 1];
-    if (depth < 0.3 || depth > 3.2 || sdf > 150) continue;   // where shore waves break
+    if (depth < 0.3 || depth > 3.2 || sdf > 150) continue;   // 海岸波破碎处
     out.set([((i + rand()) / size - 0.5) * extent, ((j + rand()) / size - 0.5) * extent, rand(), rand()], n * 4);
     n++;
   }
@@ -235,7 +235,7 @@ export class Spray {
     const material = (vertexShader) => new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3, vertexShader, fragmentShader: FRAG, uniforms: this.uniforms,
       transparent: true, depthWrite: false,
-      // premultiplied over; alpha untouched (it carries the water-facing tag)
+      // 预乘 over；alpha 保持不变（它携带朝向水面的标记）
       blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
       blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
     });

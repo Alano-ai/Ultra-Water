@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 
-// Drifting particulate underwater: points in a box that wraps around the camera, so
-// a fixed set always surrounds it. They write depth and alpha 1 like any opaque
-// object, so the underwater pass fogs each by its own distance.
+// 水下漂移的悬浮颗粒物：点分布在一个随相机环绕的盒子里，因此
+// 固定的点集始终包围相机。它们像任何不透明物体一样写入深度和
+// alpha 1，因此水下阶段按各自距离对其加雾。
 const BOX = 24;
 
 const VERT = /* glsl */`
@@ -11,10 +11,10 @@ uniform float uTime;
 uniform vec3 uScatterColor;
 uniform vec3 uSunColor;
 uniform vec3 uSunDir;
-uniform float uPx;      // pixels per metre at 1 m (projection scale)
+uniform float uPx;      // 1 m 处的每米像素数（投影缩放）
 out vec3 vCol;
 void main() {
-  // slow drift + wobble, wrapped into a box centred on the camera
+  // 缓慢漂移 + 摆动，环绕到以相机为中心的盒子里
   vec3 p = aSeed * ${BOX.toFixed(1)} + vec3(0.11, -0.03, 0.07) * uTime
          + 0.3 * sin(uTime * (0.3 + aSeed.yzx) + aSeed.zxy * 40.0);
   p = cameraPosition + mod(p - cameraPosition + ${(BOX / 2).toFixed(1)}, ${BOX.toFixed(1)}) - ${(BOX / 2).toFixed(1)};
@@ -23,7 +23,7 @@ void main() {
   float size = (0.004 + 0.01 * fract(aSeed.x * 91.7)) * uPx / max(-view.z, 0.1);
   gl_PointSize = clamp(size, 1.0, 6.0);
   vCol = uScatterColor * (uSunColor * max(uSunDir.y, 0.0) + 1.0) * 4.0 * (0.4 + fract(aSeed.y * 37.1));
-  // too close to the lens: skip
+  // 离镜头太近：跳过
   if (-view.z < 0.4 || p.y > 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 }`;
 

@@ -4,13 +4,12 @@ import { WATER_GLSL } from './OceanSurface.js';
 import { CAUSTICS_GLSL } from './Caustics.js';
 import { FLOAT_SHADOW_GLSL } from '../scene/floaterShadow.js';
 
-// Fullscreen pass over the finished HDR frame when the camera is at or below the
-// surface. Per pixel it finds whether the lens (near-plane point) is under the exact
-// rendered surface, so a wave washing over the camera splits the screen with a
-// meniscus line. Underwater pixels get the camera->hit water column: Beer-Lambert
-// extinction towards an in-scatter colour that matches the surface underside, plus
-// single-scattered sun shafts (half res) through the same wave caustics and shadows
-// that light the seabed.
+// 当相机位于水面处或以下时，对已完成的 HDR 帧做全屏处理。逐像素判断
+// 镜头（近平面上的点）是否位于精确渲染的水面之下，因此漫过相机的浪
+// 会用一条弯月面线把屏幕切开。水下像素则取相机→命中点的水柱：
+// 沿指向内散射颜色（与水面底面匹配）的 Beer-Lambert 消光，
+// 再加上穿过照亮海床的同一套波浪焦散与阴影得到的
+// 单次散射太阳光束（半分辨率）。
 const COMMON = /* glsl */`
 precision highp float;
 precision highp int;
@@ -24,8 +23,8 @@ vec3 viewPos(vec2 uv, float ndcZ) {
 }
 `;
 
-// lens depth below the surface on a coarse grid over the near plane (the exact
-// waterAt is far too heavy per pixel, and the waterline is smooth at lens scale)
+// 在近平面上按粗网格求镜头相对水面的深度
+// （精确的 waterAt 逐像素代价过高，而在镜头尺度上水线是平滑的）
 const LENS = COMMON + /* glsl */`
 in vec2 vUv;
 out vec4 outColor;
@@ -41,13 +40,13 @@ uniform mat4 uShadowMatrix;
 uniform float uShadowBias;
 uniform vec3 uAbsorption;
 uniform vec3 uSunDir;
-uniform vec4 uUnder;   // scattering coefficient (1/m), shaft strength, shaft range (m), -
-uniform float uFrame;  // frame index mod 64, rotates the jitter
+uniform vec4 uUnder;   // 散射系数（1/m）、光束强度、光束射程（m）、-
+uniform float uFrame;  // 帧序号对 64 取模，用于轮换抖动
 in vec2 vUv;
 out vec4 outColor;
 
-// light reaching a point in the water came through the surface at entry; it is lit if
-// the entry point is (terrain and floater shadows, as seen on the water surface)
+// 水中某点受到的光是从入射点穿过水面进来的；入射点被照亮它才算亮
+// （地形与浮体阴影，以水面上看到的结果为准）
 float lightAt(vec2 entry) {
   vec3 e = vec3(entry.x, 0.0, entry.y);
   vec4 sc = uShadowMatrix * vec4(e, 1.0);
@@ -56,8 +55,8 @@ float lightAt(vec2 entry) {
   return min(s, floatShadow(e));
 }
 
-// per half-res pixel: in-scattered sun along the view ray (without the sun colour and
-// strength), and the distance the composite uses to upsample without halos
+// 每个半分辨率像素：沿视线方向的内散射阳光（不含太阳颜色与强度），
+// 以及合成阶段用于无光晕上采样的距离
 void main() {
   float z = texture(tDepth, vUv).r;
   vec3 hitV = viewPos(vUv, z * 2.0 - 1.0);
@@ -71,13 +70,13 @@ void main() {
     float range = min(dist, uUnder.z);
     const int STEPS = 24;
     float stepL = range / float(STEPS);
-    // interleaved gradient noise, shifted by the golden ratio each frame
+    // 交错渐变噪声，每帧按黄金比例错位
     float jit = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))) + uFrame * 0.618034);
     float mu = dot(dir, -rs);
     const float g = 0.7;
     float phase = (1.0 - g * g) / (4.0 * PI * pow(1.0 + g * g - 2.0 * g * mu, 1.5)) + 0.04;
-    // prefilter along the ray: mip from how far one step moves through the 12 m pattern
-    // (rays sweeping across the caustics average to haze, rays along the light keep shafts)
+    // 沿射线预滤波：依据一步在 12 m 图样上移动的距离选 mip
+    // （横切焦散的射线会平均成雾霾，顺光方向的射线保留光束）
     vec2 dbase = dir.xz - rs.xz / rs.y * dir.y;
     float lod = max(log2(max(length(dbase) * stepL * CAUSTIC_TEXELS_PER_M, 1.0)), 1.0);
     for (int i = 0; i < STEPS; i++) {
@@ -104,17 +103,17 @@ uniform vec3 uAbsorption;
 uniform vec3 uScatterColor;
 uniform vec3 uSunDir;
 uniform vec3 uSunColor;
-uniform vec4 uUnder;   // scattering coefficient (1/m), shaft strength, shaft range (m), meniscus darkening
-uniform float uFull;   // 1: camera deep enough that the whole near plane is submerged
+uniform vec4 uUnder;   // 散射系数（1/m）、光束强度、光束射程（m）、弯月面变暗
+uniform float uFull;   // 1：相机足够深，整个近平面都被淹没
 in vec2 vUv;
 out vec4 outColor;
 
-// alpha tag from the water pass: 0 underside, 1 no water, 2 top (edges average between)
+// 水面阶段的 alpha 标记：0 为底面，1 为无水，2 为顶面（边缘处取两者的平均）
 float isFront(float a) { return step(1.5, a); }
 float isBack(float a) { return step(a, 0.5); }
 
-// half-res shafts back to full res, weighting the 4 nearest by distance agreement so
-// shafts in front of an object don't bleed onto it
+// 把半分辨率光束恢复到全分辨率，按距离一致性对最近 4 个采样加权，
+// 使物体前方的光束不会渗到物体上
 vec3 shafts(vec2 uv, float dist) {
   vec2 hs = vec2(textureSize(tShafts, 0));
   vec2 st = uv * hs - 0.5;
@@ -134,15 +133,15 @@ vec3 shafts(vec2 uv, float dist) {
 }
 
 void main() {
-  float d = uFull > 0.5 ? 10.0 : texture(tLens, vUv).r;   // lens depth
+  float d = uFull > 0.5 ? 10.0 : texture(tLens, vUv).r;   // 镜头深度
 
-  // where the pixel sees the water surface, its facing decides; elsewhere the lens
-  // test. That keeps the split consistent with the mesh even where its coarse fan
-  // around the lens disagrees with the exact height.
+  // 像素看到水面本身时，由朝向决定；其他位置用镜头测试。
+  // 这样即使镜头周围那圈粗糙扇形与精确高度不一致，
+  // 分割结果也与网格保持一致。
   vec4 src = texture(tColor, vUv);
   bool under = isBack(src.a) > 0.5 || (isFront(src.a) < 0.5 && d > 0.0);
 
-  // meniscus: a dark line where the top of the surface meets its underside on screen
+  // 弯月面：屏幕上水面顶面与底面相接处的暗线
   float meniscus = 1.0;
   if (uFull < 0.5) {
     vec2 px = 2.0 / vec2(textureSize(tColor, 0));
@@ -153,7 +152,7 @@ void main() {
       f += isFront(a);
       b += isBack(a);
     }
-    // only near the lens: far front/back boundaries are folded crests, not the waterline
+    // 只在镜头附近：远处的正/背面边界是折起的波峰，不是水线
     meniscus -= uUnder.w * max(isFront(src.a) * min(b, 1.0), isBack(src.a) * min(f, 1.0))
               * smoothstep(0.35, 0.1, abs(d));
   }
@@ -163,7 +162,7 @@ void main() {
   }
   d = max(d, 0.0);
 
-  // slight refractive wobble of the whole image
+  // 整幅图像的轻微折射抖动
   vec2 uv = vUv + vec2(sin(vUv.y * 37.0 + uTime * 1.9), cos(vUv.x * 29.0 + uTime * 1.6)) * 0.0012;
   vec3 col = texture(tColor, uv).rgb;
   float z = texture(tDepth, uv).r;
@@ -172,8 +171,8 @@ void main() {
   vec3 dir = normalize(mat3(uCamWorld) * hitV);
 
   vec3 sigT = uAbsorption + uUnder.x;
-  // in-scatter: the surface underside's deep-water colour, darker with depth and
-  // brighter looking up towards the light
+  // 内散射：水面底面的深水颜色，随深度变暗，
+  // 朝光向上看时变亮
   vec3 ambient = textureLod(uSkyCube, vec3(0.0, 1.0, 0.0), uSkyMaxLod).rgb;
   vec3 fogCol = uScatterColor * (ambient + uSunColor * max(uSunDir.y, 0.0))
               * exp(-uAbsorption * d * 0.5) * mix(0.55, 1.35, dir.y * 0.5 + 0.5);
@@ -186,7 +185,7 @@ void main() {
 
 export class UnderwaterPass {
   constructor(surface, camera, caustics) {
-    this.params = { scattering: 0.03, shafts: 2, shaftRange: 40, meniscus: 0.5 };   // shafts: 1 = physical single scattering
+    this.params = { scattering: 0.03, shafts: 2, shaftRange: 40, meniscus: 0.5 };   // shafts：1 表示物理上的单次散射
     this.uniforms = {
       ...surface.uniforms,
       tColor: { value: null }, tDepth: { value: null }, ...caustics,
@@ -211,7 +210,7 @@ export class UnderwaterPass {
     this.shaftRT.setSize(Math.ceil(w / 2), Math.ceil(h / 2));
   }
 
-  // src: the HDR target after the water pass (colour + depth). Returns the new colour.
+  // src：水面阶段之后的 HDR 渲染目标（颜色 + 深度）。返回新的颜色。
   render(renderer, src, full) {
     const u = this.uniforms, p = this.params;
     u.tColor.value = src.texture;

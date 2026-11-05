@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { FullscreenQuad, rawPass } from '../engine/fullscreen.js';
 
-// One-off procedural textures, baked at startup (tileable, mipmapped, RGBA8).
-// Foam: R = lace pattern (coverage by erosion), G = whitewater billow height,
-// BA = its gradient per tile (0.5 + d/duv / 64).
+// 启动时一次性烘焙的程序化纹理（可平铺、带 mipmap、RGBA8）。
+// 泡沫：R = 蕾丝图案（按侵蚀得到的覆盖率），G = 白浪隆起高度，
+// BA = 每平铺块的梯度（0.5 + d/duv / 64）。
 
 const FOAM = /* glsl */`
 precision highp float;
@@ -14,7 +14,7 @@ vec2 hash22(vec2 p) {
   p3 += dot(p3, p3.yzx + 33.33);
   return fract((p3.xx + p3.yz) * p3.zy);
 }
-// tileable voronoi: cell ids wrap at period
+// 可平铺 voronoi：单元 id 按周期环绕
 vec2 voronoi(vec2 p, float period) {
   vec2 i = floor(p), f = fract(p);
   float f1 = 8.0, f2 = 8.0;
@@ -26,8 +26,8 @@ vec2 voronoi(vec2 p, float period) {
   }
   return vec2(f1, f2);
 }
-// cauliflower whitewater: every voronoi cell bulges (dome over the distance to its
-// edge, creased where cells meet), at three scales
+// 花椰菜状白浪：每个 voronoi 单元都鼓起（按到其边缘的距离形成圆顶，
+// 单元相接处有褶皱），共三个尺度
 float billow(vec2 uv) {
   vec2 a = voronoi(uv * 7.0 + 0.3, 7.0), b = voronoi(uv * 17.0 + 0.7, 17.0), c = voronoi(uv * 41.0 + 0.1, 41.0);
   return 0.5 * sqrt(clamp((a.y - a.x) * 2.2, 0.0, 1.0)) + 0.32 * sqrt(clamp((b.y - b.x) * 2.2, 0.0, 1.0))
