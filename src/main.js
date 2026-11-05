@@ -30,13 +30,13 @@ renderer.autoClear = false;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.shadowMap.autoUpdate = false;
-// three caps texture units at the per-stage limit (16), but the water's vertex + fragment
-// samplers together are 17 (16 in the fragment stage); units only need the combined limit
+// three 将纹理单元数限制在单阶段上限（16），但水体的顶点 + 片元
+// 采样器合计为 17（片元阶段为 16）；单元只需满足合计上限
 renderer.capabilities.maxTextures = renderer.getContext().getParameter(WebGL2RenderingContext.MAX_COMBINED_TEXTURE_IMAGE_UNITS);
 document.body.appendChild(renderer.domElement);
 
-// one build: phones and tablets (a finger is the main pointer) start on a lighter profile,
-// measured on an Adreno 732 to hold 60 fps; ?mobile / ?desktop force either
+// 单一构建：手机和平板（以手指为主要指针）从更轻量的配置档开始，
+// 在 Adreno 732 上实测可保持 60 fps；`?mobile` / `?desktop` 强制指定其一
 const args = new URLSearchParams(location.search);
 const mobile = args.has('mobile') || (!args.has('desktop') && matchMedia('(pointer: coarse)').matches);
 const quality = mobile
@@ -48,10 +48,10 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.maxDistance = 6000;
 
-// --- world ------------------------------------------------------------------------
+// --- 世界 ------------------------------------------------------------------------
 const sky = new SkySystem(renderer);
-// the surf rock as a dome in the bake: the fronts wrap round it, break on its face and
-// leave a sheltered lee
+// 烘焙中的拍岸礁石作为一个圆顶：浪头绕过它、在其正面破碎，
+// 并留下一片遮蔽的背风区
 const shore = bakeShoreMap(islandHeight, 1800, 512, (x, z) => {
   const q = ((x - heroRock.x) ** 2 + (z - heroRock.z) ** 2) / (8.5 * 8.5);
   return q < 1 ? 4 * (1 - q) : -Infinity;
@@ -83,22 +83,21 @@ scene.add(sunLight, sunLight.target);
 surface.uniforms.uShadowMatrix.value = terrain.uniforms.uSunShadowMatrix.value = sunLight.shadow.matrix;
 surface.uniforms.uShadowBias.value = 0.05 / (sunLight.shadow.camera.far - sunLight.shadow.camera.near);
 
-// buoyancy: slot 0 of every water query is the camera (underwater test), then floaters
+// 浮力：每次水面查询的槽位 0 是相机（水下测试），随后是浮体
 const query = new WaterQuery(renderer, surface, 512);
 const floaters = new Floaters({ scene, heightAt: islandHeight, patchMaterial: terrain.patchProp });
 const underwater = new UnderwaterPass(surface, camera, caustics.uniforms);
 let camWater = 0, wasSubmerged = false, uwComp = 1;
-const look = { underwater: 0.55 };   // exposure compensation under water (auto exposure lifts it to milk otherwise)
+const look = { underwater: 0.55 };   // 水下的曝光补偿（否则自动曝光会把它提亮成奶白色）
 
 const reflection = new PlanarReflection(REFLECT_LAYER);
 surface.uniforms.uReflMatrix.value = reflection.textureMatrix;
 const emptyReflection = new THREE.DataTexture(new Uint8Array(4), 1, 1);
 emptyReflection.needsUpdate = true;
 
-// water pass: draw into the same MSAA buffer, sampling the resolved opaque colour and
-// depth. three keeps the MSAA colour after a resolve except on the Oculus browser,
-// where it invalidates it; only there is the colour copied back first (costs ~0.5 ms
-// at 3.3 MP).
+// 水面阶段：绘制到同一个 MSAA 缓冲区，采样已解析的不透明颜色与
+// 深度。three 在解析后保留 MSAA 颜色，但 Oculus 浏览器除外，
+// 那里会使其失效；只有该环境需要先把颜色拷回（在 3.3 MP 下约花费 0.5 ms）。
 const waterScene = new THREE.Scene();
 const restore = new FullscreenQuad(rawPass(/* glsl */`
 precision highp float;
@@ -115,7 +114,7 @@ waterScene.add(surface.mesh, spray.mesh, spray.splash, spray.rockSplash, snow.me
 const post = new PostFX(renderer);
 post.params.bloomStrength = 0.05;
 post.params.bloomThreshold = 1.5;
-if (mobile) post.params.bloomStrength = 0;   // its 12 passes cost a phone more than this faint glow is worth
+if (mobile) post.params.bloomStrength = 0;   // 它的 12 个阶段在手机上的开销高于这层微光的价值
 
 let hdrRT = null;
 function makeTargets() {
@@ -154,7 +153,7 @@ function applySun() {
   sunDirty = false;
 }
 
-// --- camera presets -----------------------------------------------------------------
+// --- 镜头预设 -----------------------------------------------------------------
 function coast(bearingDeg) {
   const a = THREE.MathUtils.degToRad(bearingDeg);
   let r = 100;
@@ -176,7 +175,7 @@ const views = {
   },
   'Breakers': () => {
     setSun(38, 205);
-    // from 10 m over the clear outer shelf, looking down across the break line to the beach
+    // 从清澈外海浅滩上方 10 米处，越过碎浪线向下望向海滩
     const b = sunBearing() + 1.9, c = coast(THREE.MathUtils.radToDeg(b));
     const out = new THREE.Vector2(Math.cos(b), Math.sin(b)), side = new THREE.Vector2(-out.y, out.x);
     camera.position.set(c.x + out.x * 48 - side.x * 35, 10, c.y + out.y * 48 - side.y * 35);
@@ -184,7 +183,7 @@ const views = {
   },
   'Lagoon': () => {
     setSun(50, 205);
-    // the wide, flat shelf on the island's south-west: 1-2 m turquoise shallows, sand bars, soft swash
+    // 岛屿西南侧宽阔平坦的浅滩：1-2 米深的绿松石色浅水区、沙洲和柔和的上冲流
     const b = sunBearing() - 1.48, c = coast(THREE.MathUtils.radToDeg(b));
     const out = new THREE.Vector2(Math.cos(b), Math.sin(b)), side = new THREE.Vector2(-out.y, out.x);
     camera.position.set(c.x - out.x * 2 + side.x * 25, 16, c.y - out.y * 2 + side.y * 25);
@@ -192,7 +191,7 @@ const views = {
   },
   'Surf rock': () => {
     setSun(40, 205);
-    // the big rock in the surf, from a little above and up the beach side
+    // 拍岸浪中的大礁石，从略高处、偏向海滩一侧观看
     const out = new THREE.Vector2(heroRock.x, heroRock.z).normalize(), side = new THREE.Vector2(-out.y, out.x);
     camera.position.set(heroRock.x - out.x * 28 + side.x * 22, 14, heroRock.z - out.y * 28 + side.y * 22);
     controls.target.set(heroRock.x, 0, heroRock.z);
@@ -218,7 +217,7 @@ const views = {
   },
   'Underwater': () => {
     setSun(48, 205);
-    // on the lee of the island, looking back up the reef slope into the sun (shafts)
+    // 在岛屿背风面，沿礁石坡面回头望向太阳（光束）
     const a = sunBearing() + Math.PI + 0.3;
     let r = 200;
     while (r < 1000 && islandHeight(Math.cos(a) * r, Math.sin(a) * r) > -9) r += 2;
@@ -232,45 +231,46 @@ const views = {
 let fSun = null;
 // --- GUI -----------------------------------------------------------------------
 const gui = new GUI({ title: 'Gelatin Water' });
-if (mobile) gui.close();   // on phones the open panel covers most of the screen
+if (mobile) gui.close();   // 手机上打开的面板会遮住大部分屏幕
 const ui = { view: 'Lagoon', benchmark: () => benchButton.click(), exposure: 1 };
-gui.add(ui, 'view', Object.keys(views)).name('camera').onChange((v) => views[v]());
-gui.add(ui, 'benchmark').name('benchmark (uncapped)');
+const VIEW_LABELS = { 'Golden hour': '黄金时刻', 'Breakers': '碎浪', 'Lagoon': '潟湖', 'Surf rock': '拍岸礁石', 'Open ocean': '开阔外海', 'Aerial': '俯瞰', 'Flotsam': '漂浮物', 'Underwater': '水下' };
+gui.add(ui, 'view', Object.fromEntries(Object.keys(views).map(k => [VIEW_LABELS[k], k]))).name('镜头').onChange((v) => views[v]());
+gui.add(ui, 'benchmark').name('基准测试（不限帧）');
 
-fSun = gui.addFolder('Sun & sky');
-fSun.add(sky.params, 'elevation', -2, 70, 0.1).onChange(() => (sunDirty = true));
-fSun.add(sky.params, 'azimuth', 0, 360, 0.5).onChange(() => (sunDirty = true));
-fSun.add(sky.params, 'sunIntensity', 0, 20, 0.1).onChange(() => (sunDirty = true));
-fSun.add(sky.params, 'cloudCoverage', 0, 1, 0.01).onChange(() => (sunDirty = true));
-fSun.add(sky.params, 'turbidity', 1, 10, 0.1).onChange(() => (sunDirty = true));
+fSun = gui.addFolder('太阳与天空');
+fSun.add(sky.params, 'elevation', -2, 70, 0.1).name('太阳仰角').onChange(() => (sunDirty = true));
+fSun.add(sky.params, 'azimuth', 0, 360, 0.5).name('方位角').onChange(() => (sunDirty = true));
+fSun.add(sky.params, 'sunIntensity', 0, 20, 0.1).name('太阳强度').onChange(() => (sunDirty = true));
+fSun.add(sky.params, 'cloudCoverage', 0, 1, 0.01).name('云量').onChange(() => (sunDirty = true));
+fSun.add(sky.params, 'turbidity', 1, 10, 0.1).name('浊度').onChange(() => (sunDirty = true));
 
 const op = ocean.params, dirty = () => (ocean.dirty = true);
-const fWave = gui.addFolder('Waves');
-fWave.add(op, 'windSpeed', 1, 25, 0.1).onChange(dirty);
-fWave.add(op, 'windDirection', -180, 180, 1).onChange(dirty);
-fWave.add(op, 'fetchKm', 5, 1000, 1).onChange(dirty);
-fWave.add(op, 'waveScale', 0, 3, 0.01).onChange(dirty);
-fWave.add(op, 'spreadBlend', 0, 1, 0.01).onChange(dirty);
-fWave.add(op, 'swellScale', 0, 3, 0.01).onChange(dirty);
-fWave.add(op, 'swellDirection', -180, 180, 1).onChange(dirty);
-fWave.add(op, 'choppiness', 0, 2, 0.01);
-fWave.add(op, 'timeScale', 0, 3, 0.01);
+const fWave = gui.addFolder('海浪');
+fWave.add(op, 'windSpeed', 1, 25, 0.1).name('风速').onChange(dirty);
+fWave.add(op, 'windDirection', -180, 180, 1).name('风向').onChange(dirty);
+fWave.add(op, 'fetchKm', 5, 1000, 1).name('风区长度（km）').onChange(dirty);
+fWave.add(op, 'waveScale', 0, 3, 0.01).name('波浪幅度').onChange(dirty);
+fWave.add(op, 'spreadBlend', 0, 1, 0.01).name('扩散混合').onChange(dirty);
+fWave.add(op, 'swellScale', 0, 3, 0.01).name('涌浪幅度').onChange(dirty);
+fWave.add(op, 'swellDirection', -180, 180, 1).name('涌浪方向').onChange(dirty);
+fWave.add(op, 'choppiness', 0, 2, 0.01).name('尖锐度');
+fWave.add(op, 'timeScale', 0, 3, 0.01).name('时间缩放');
 
 const su = surface.uniforms;
 const shoreUi = { amplitude: su.uShoreWave.value.x, wavelength: su.uShoreWave.value.y, speed: su.uShoreWave.value.z, steepness: su.uShoreWave.value.w };
 const setShore = () => su.uShoreWave.value.set(shoreUi.amplitude, shoreUi.wavelength, shoreUi.speed, shoreUi.steepness);
-const fShore = gui.addFolder('Shore waves');
-fShore.add(shoreUi, 'amplitude', 0, 1.5, 0.01).onChange(setShore);
-fShore.add(shoreUi, 'wavelength', 8, 60, 0.5).onChange(setShore);
-fShore.add(shoreUi, 'speed', 0.3, 2, 0.01).onChange(setShore);
-fShore.add(shoreUi, 'steepness', 0, 1.5, 0.01).onChange(setShore);
-fShore.add(spray.params, 'amount', 0, 3, 0.01).name('spray');
-fShore.add(spray.params, 'size', 0.2, 3, 0.01).name('spray size');
+const fShore = gui.addFolder('岸边波浪');
+fShore.add(shoreUi, 'amplitude', 0, 1.5, 0.01).name('幅度').onChange(setShore);
+fShore.add(shoreUi, 'wavelength', 8, 60, 0.5).name('波长').onChange(setShore);
+fShore.add(shoreUi, 'speed', 0.3, 2, 0.01).name('速度').onChange(setShore);
+fShore.add(shoreUi, 'steepness', 0, 1.5, 0.01).name('陡度').onChange(setShore);
+fShore.add(spray.params, 'amount', 0, 3, 0.01).name('水花');
+fShore.add(spray.params, 'size', 0.2, 3, 0.01).name('水花大小');
 
-// Water colour presets (linear RGB). The look comes from the per-channel absorption
-// (1/m: the channel absorbed least is the colour you see through shallow water), the
-// in-scatter colour (deep water, underside, underwater fog), the tint of thin foam and
-// the underwater scattering (turbidity). 'clear' is the default look.
+// 水体配色预设（线性 RGB）。观感来自逐通道吸收系数
+// （1/m：被吸收最少的通道就是透过浅水看到的颜色）、
+// 内散射颜色（深水、底面、水下雾）、薄泡沫的色调以及
+// 水下散射（浊度）。'clear' 是默认外观。
 const WATER_PRESETS = {
   clear: { absorption: [0.40, 0.062, 0.032], scatter: [0.0, 0.05, 0.08], foam: [0.62, 0.78, 0.82], turbidity: 0.03 },
   tropical: { absorption: [0.36, 0.045, 0.06], scatter: [0.0, 0.085, 0.085], foam: [0.66, 0.86, 0.84], turbidity: 0.02 },
@@ -280,7 +280,7 @@ const WATER_PRESETS = {
   'murky brown': { absorption: [0.55, 0.62, 0.9], scatter: [0.045, 0.045, 0.022], foam: [0.78, 0.74, 0.6], turbidity: 0.25 },
 };
 
-const fWater = gui.addFolder('Water');
+const fWater = gui.addFolder('水体');
 const w = {
   preset: 'clear',
   roughness: su.uOptics.value.x, refraction: su.uOptics.value.y, reflectionDistort: su.uOptics.value.z,
@@ -309,22 +309,23 @@ const applyPreset = () => {
   setWater();
   gui.controllersRecursive().forEach((c) => c.updateDisplay());
 };
-fWater.add(w, 'preset', Object.keys(WATER_PRESETS)).name('colour preset').onChange(applyPreset);
-fWater.add(w, 'clarity', 0.2, 4, 0.01).onChange(setWater);
-fWater.addColor(w, 'scatter').onChange(setWater);
-fWater.add(w, 'roughness', 0.005, 0.2, 0.001).onChange(setWater);
-fWater.add(w, 'refraction', 0, 0.2, 0.001).onChange(setWater);
-fWater.add(w, 'reflectionDistort', 0, 0.2, 0.001).onChange(setWater);
-fWater.add(w, 'sssPeak', 0, 6, 0.01).onChange(setWater);
-fWater.add(w, 'sssView', 0, 0.5, 0.001).onChange(setWater);
-fWater.add(w, 'foamBias', -0.5, 1.5, 0.01).onChange(setWater);
-fWater.add(w, 'foamScale', 0, 6, 0.01).onChange(setWater);
-fWater.add(w, 'foamRecovery', 0.05, 3, 0.01).onChange(setWater);
-fWater.add(w, 'shoreFoamBand', 0, 2, 0.01).onChange(setWater);
-fWater.add(w, 'caustics', 0, 2, 0.01).onChange(setWater);
-fWater.add(su.uGlint, 'value', 0, 1, 0.01).name('glitter');
+const WATER_LABELS = { clear: '清澈', tropical: '热带', 'toxic green': '毒绿', purple: '紫罗兰', 'rust orange': '锈橙', 'murky brown': '浑浊棕' };
+fWater.add(w, 'preset', Object.fromEntries(Object.keys(WATER_PRESETS).map(k => [WATER_LABELS[k], k]))).name('配色预设').onChange(applyPreset);
+fWater.add(w, 'clarity', 0.2, 4, 0.01).name('清澈度').onChange(setWater);
+fWater.addColor(w, 'scatter').name('内散射').onChange(setWater);
+fWater.add(w, 'roughness', 0.005, 0.2, 0.001).name('粗糙度').onChange(setWater);
+fWater.add(w, 'refraction', 0, 0.2, 0.001).name('折射').onChange(setWater);
+fWater.add(w, 'reflectionDistort', 0, 0.2, 0.001).name('反射扭曲').onChange(setWater);
+fWater.add(w, 'sssPeak', 0, 6, 0.01).name('SSS 峰值').onChange(setWater);
+fWater.add(w, 'sssView', 0, 0.5, 0.001).name('SSS 视角').onChange(setWater);
+fWater.add(w, 'foamBias', -0.5, 1.5, 0.01).name('泡沫偏移').onChange(setWater);
+fWater.add(w, 'foamScale', 0, 6, 0.01).name('泡沫尺度').onChange(setWater);
+fWater.add(w, 'foamRecovery', 0.05, 3, 0.01).name('泡沫恢复').onChange(setWater);
+fWater.add(w, 'shoreFoamBand', 0, 2, 0.01).name('岸边泡沫带').onChange(setWater);
+fWater.add(w, 'caustics', 0, 2, 0.01).name('焦散').onChange(setWater);
+fWater.add(su.uGlint, 'value', 0, 1, 0.01).name('闪光');
 
-const fFloat = gui.addFolder('Floaters & underwater');
+const fFloat = gui.addFolder('漂浮物与水下');
 const ahead = (d) => {
   const f = camera.getWorldDirection(new THREE.Vector3()).setY(0).normalize();
   return camera.position.clone().addScaledVector(f, d);
@@ -334,52 +335,54 @@ const floatUi = {
   drop: () => floaters.add(FLOATER_KINDS[Math.floor(Math.random() * FLOATER_KINDS.length)], ahead(14).setY(Math.max(camWater, 0) + 4)),
   clear: () => floaters.clear(),
 };
-fFloat.add(floatUi, 'spawn').name('spawn flotsam ahead');
-fFloat.add(floatUi, 'drop').name('drop random prop');
-fFloat.add(floatUi, 'clear');
-fFloat.add(floaters.params, 'drag', 0, 6, 0.01);
-fFloat.add(floaters.params, 'angularDrag', 0, 4, 0.01);
-fFloat.add(floaters.params, 'buoyancy', 0, 2, 0.01);
-fFloat.add(underwater.params, 'scattering', 0, 0.5, 0.001);
-fFloat.add(underwater.params, 'shafts', 0, 4, 0.01);
-fFloat.add(underwater.params, 'shaftRange', 5, 120, 1);
-fFloat.add(underwater.params, 'meniscus', 0, 1, 0.01);
-fFloat.add(look, 'underwater', 0.2, 2, 0.01).name('underwater exposure');
+fFloat.add(floatUi, 'spawn').name('前方生成漂浮物');
+fFloat.add(floatUi, 'drop').name('随机投放道具');
+fFloat.add(floatUi, 'clear').name('清除');
+fFloat.add(floaters.params, 'drag', 0, 6, 0.01).name('阻力');
+fFloat.add(floaters.params, 'angularDrag', 0, 4, 0.01).name('角阻力');
+fFloat.add(floaters.params, 'buoyancy', 0, 2, 0.01).name('浮力');
+fFloat.add(underwater.params, 'scattering', 0, 0.5, 0.001).name('水下散射');
+fFloat.add(underwater.params, 'shafts', 0, 4, 0.01).name('光束');
+fFloat.add(underwater.params, 'shaftRange', 5, 120, 1).name('光束范围');
+fFloat.add(underwater.params, 'meniscus', 0, 1, 0.01).name('弯月面');
+fFloat.add(look, 'underwater', 0.2, 2, 0.01).name('水下曝光');
 
-const fPost = gui.addFolder('Post');
-fPost.add(ui, 'exposure', 0.25, 4, 0.01).name('exposure comp');
-fPost.add(post.params, 'autoExposure');
-fPost.add(post.params, 'keyValue', 0.05, 0.6, 0.01);
-fPost.add(post.params, 'bloomStrength', 0, 0.5, 0.001);
-fPost.add(post.params, 'bloomThreshold', 0, 10, 0.01);
-fPost.add(post.params, 'contrast', 0.7, 1.6, 0.01);
-fPost.add(post.params, 'saturation', 0, 2, 0.01);
+const fPost = gui.addFolder('后期');
+fPost.add(ui, 'exposure', 0.25, 4, 0.01).name('曝光补偿');
+fPost.add(post.params, 'autoExposure').name('自动曝光');
+fPost.add(post.params, 'keyValue', 0.05, 0.6, 0.01).name('曝光关键值');
+fPost.add(post.params, 'bloomStrength', 0, 0.5, 0.001).name('泛光强度');
+fPost.add(post.params, 'bloomThreshold', 0, 10, 0.01).name('泛光阈值');
+fPost.add(post.params, 'contrast', 0.7, 1.6, 0.01).name('对比度');
+fPost.add(post.params, 'saturation', 0, 2, 0.01).name('饱和度');
 
-const fQ = gui.addFolder('Quality');
-const resController = fQ.add(quality, 'resolution', 0.25, 1, 0.05).onFinishChange(resize);
-if (mobile) fQ.add(quality, 'autoResolution').name('auto resolution');
-fQ.add(quality, 'msaa', [2, 4, 8]).onChange(makeTargets);   // water samples the resolve, so MSAA is required
-fQ.add(quality, 'reflections');
-fQ.add(quality, 'reflectionScale', 0.25, 1, 0.05).onFinishChange(makeTargets);
+const fQ = gui.addFolder('画质');
+const resController = fQ.add(quality, 'resolution', 0.25, 1, 0.05).name('分辨率').onFinishChange(resize);
+if (mobile) fQ.add(quality, 'autoResolution').name('自动分辨率');
+fQ.add(quality, 'msaa', [2, 4, 8]).name('MSAA').onChange(makeTargets);   // 水面采样解析结果，因此必须启用 MSAA
+fQ.add(quality, 'reflections').name('反射');
+fQ.add(quality, 'reflectionScale', 0.25, 1, 0.05).name('反射尺度').onFinishChange(makeTargets);
 [fWave, fShore, fWater, fFloat, fPost].forEach((f) => f.close());
 
-// --- frame ---------------------------------------------------------------------
+// --- 帧 ---------------------------------------------------------------------
 const gl = renderer.getContext();
 const timer = new GpuTimer(gl);
 let elapsed = 0;
+// 渲染阶段显示名（内部键保持英文）
+const PASS_LABELS = { floatShadow: '浮体阴影', caustics: '焦散', query: '高度查询', reflection: '反射', opaque: '不透明', water: '水面', underwater: '水下', post: '后期' };
 
 function renderFrame(dt) {
   elapsed += dt;
   if (sunDirty) applySun();
   timer.beginFrame();
 
-  // latest water heights (1-3 frames old) drive the camera test and the floaters
+  // 最新的水面高度（滞后 1-3 帧）驱动相机测试与浮体
   if (query.resultCount > 0) camWater = query.result[0];
   floaters.ingest(query, 1);
   floaters.step(dt);
   timer.begin('floatShadow');
   floatShadow.update(renderer, floaters.scene, floaters.bodies, sky.sunDir);
-  // water entries -> ripple rings + splash (ages on the floaters' clock)
+  // 入水条目 -> 涟漪环 + 溅水（按浮体的时钟计时老化）
   for (let i = 0; i < 8; i++) {
     const e = floaters.impacts[i], age = e ? floaters.time - e.t : 1e9;
     su.uImpact.value[i].set(e?.x ?? 0, e?.z ?? 0, age, age < 30 ? e.amp : 0);
@@ -401,7 +404,7 @@ function renderFrame(dt) {
   snow.update(camera, hdrRT.height, nearSurface);
   uwComp += ((submerged ? look.underwater : 1) - uwComp) * Math.min(1, dt * 3);
   post.params.exposure = ui.exposure * uwComp;
-  // water on the lens for a few seconds after surfacing
+  // 出水后镜头上的水持续几秒
   post.params.droplets = wasSubmerged && !submerged ? 1 : submerged ? 0 : Math.max(0, post.params.droplets - dt / 5);
   wasSubmerged = submerged;
 
@@ -419,7 +422,7 @@ function renderFrame(dt) {
 
   timer.begin('water');
   su.uShadowMap.value = sunLight.shadow.map.depthTexture;
-  hdrRT.resolveDepthBuffer = nearSurface;   // only the underwater pass needs depth with water
+  hdrRT.resolveDepthBuffer = nearSurface;   // 只有水下阶段需要带水面的深度
   renderer.render(waterScene, camera);
   hdrRT.resolveDepthBuffer = true;
 
@@ -435,12 +438,12 @@ function renderFrame(dt) {
 }
 
 function clampCamera() {
-  // free to dive; just stay out of the ground
+  // 可自由下潜；只是不要进入地面
   const floor = islandHeight(camera.position.x, camera.position.z) + 0.8;
   if (camera.position.y < floor) camera.position.y = floor;
 }
 
-// Chrome/ANGLE's readPixels and finish don't wait for the GPU, so sync on a fence.
+// Chrome/ANGLE 的 `readPixels` 和 `finish` 不会等待 GPU，因此用同步围栏来同步。
 async function gpuFence() {
   const s = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
   gl.flush();
@@ -448,8 +451,8 @@ async function gpuFence() {
   gl.deleteSync(s);
 }
 
-// frames back-to-back (render loop paused), timed to GPU completion; also returns the
-// per-pass GPU times measured at full clocks
+// 背靠背渲染帧（渲染循环暂停），计时到 GPU 完成；同时返回在满频率下
+// 测得的逐阶段 GPU 时间
 let benchmarking = false;
 async function runBenchmark(frames = 300) {
   if (benchmarking) return null;
@@ -468,9 +471,9 @@ async function runBenchmark(frames = 300) {
   benchmarking = false;
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
   const gpu = Object.values(passes).reduce((a, b) => a + b, 0);
-  bench = `benchmark ${ms.toFixed(2)} ms/frame = ${(1000 / ms).toFixed(0)} fps${timer.available ? ` (GPU ${gpu.toFixed(2)} ms)` : ''}`
+  bench = `基准测试 ${ms.toFixed(2)} 毫秒/帧 = ${(1000 / ms).toFixed(0)} 帧每秒${timer.available ? `（GPU ${gpu.toFixed(2)} 毫秒）` : ''}`
     + Object.entries(passes).map(([k, v]) => `
-  ${k.padEnd(12)} ${v.toFixed(3)} ms`).join('');
+  ${(PASS_LABELS[k] ?? k).padEnd(12)} ${v.toFixed(3)} 毫秒`).join('');
   console.log(`${size.x}×${size.y} ${bench}`);
   return { ms, gpu, passes };
 }
@@ -480,40 +483,40 @@ window.app = {
   camWater: () => camWater, markSun: () => (sunDirty = true),
 };
 
-// --- HUD + loop ------------------------------------------------------------------
+// --- HUD + 循环 ------------------------------------------------------------------
 const $ = (id) => document.getElementById(id);
 const hud = $('hud'), graph = $('pGraph').getContext('2d'), uncapButton = $('pUncap'), fpsHistory = [];
 let bench = '', frames = 0, lastHud = performance.now(), last = performance.now(), uncapped = false;
 $('pGpu').textContent = (() => {
   const ext = gl.getExtension('WEBGL_debug_renderer_info');
-  const raw = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'unknown GPU';
+  const raw = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '未知 GPU';
   return raw.split(', ')[1]?.replace(/ \(0x.*$/, '') || raw;   // "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x2504) ...)"
 })();
 uncapButton.onclick = () => {
   uncapped = !uncapped;
-  uncapButton.textContent = uncapped ? 'Cap to display' : 'Uncap FPS';
+  uncapButton.textContent = uncapped ? '跟随刷新率' : '解除限帧';
   uncapButton.classList.toggle('on', uncapped);
   fpsHistory.length = 0;
 };
-// on request only: it freezes the screen for its 320 frames, which read as a hitch on load
+// 仅在请求时运行：它的 320 帧会冻结屏幕，加载时直接运行会显得卡顿
 const benchButton = $('pBench');
 benchButton.onclick = async () => {
   if (benchButton.disabled) return;
   benchButton.disabled = true;
-  benchButton.textContent = 'Benchmarking…';
-  await new Promise((r) => requestAnimationFrame(() => setTimeout(r)));   // let the label paint first
+  benchButton.textContent = '基准测试中…';
+  await new Promise((r) => requestAnimationFrame(() => setTimeout(r)));   // 让标签先绘制出来
   await runBenchmark();
   benchButton.disabled = false;
-  benchButton.textContent = 'Run benchmark';
+  benchButton.textContent = '运行基准测试';
 };
 
 function updateHud(now) {
   const fps = (frames * 1000) / (now - lastHud);
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-  $('pSpec').textContent = `${size.x}×${size.y} · ${quality.msaa}× MSAA · ${mobile ? 'mobile' : 'desktop'} profile`;
+  $('pSpec').textContent = `${size.x}×${size.y} · ${quality.msaa}× MSAA · ${mobile ? '移动端' : '桌面端'} 配置档`;
   $('pFps').textContent = fps.toFixed(0);
-  $('pMode').textContent = uncapped ? 'UNCAPPED' : 'VSYNC';
-  $('pMs').textContent = `${(1000 / fps).toFixed(2)} ms/frame`;
+  $('pMode').textContent = uncapped ? '不限帧' : '垂直同步';
+  $('pMs').textContent = `${(1000 / fps).toFixed(2)} 毫秒/帧`;
   fpsHistory.push(fps);
   if (fpsHistory.length > 40) fpsHistory.shift();
   const { width: w, height: h } = graph.canvas, lo = Math.min(...fpsHistory) * 0.9, hi = Math.max(...fpsHistory) * 1.05;
@@ -525,9 +528,9 @@ function updateHud(now) {
   graph.stroke();
   let text = '';
   if (timer.available && timer.total > 0) {
-    // at vsync the GPU downclocks, so these read high; uncapped or the benchmark measure at full clocks
-    text += `GPU timers ${timer.total.toFixed(2)} ms${uncapped ? '' : ' (vsync-idle clocks)'}`;
-    for (const [k, v] of Object.entries(timer.ms)) text += `\n  ${k.padEnd(10)} ${v.toFixed(3)} ms`;
+    // 垂直同步时 GPU 会降频，因此这些读数偏高；不限帧或基准测试会在满频率下测量
+    text += `GPU 计时 ${timer.total.toFixed(2)} 毫秒${uncapped ? '' : '（垂直同步待机频率）'}`;
+    for (const [k, v] of Object.entries(timer.ms)) text += `\n  ${(PASS_LABELS[k] ?? k).padEnd(10)} ${v.toFixed(3)} 毫秒`;
   }
   if (bench) text += `${text ? '\n' : ''}${bench}`;
   hud.textContent = text;
@@ -535,12 +538,12 @@ function updateHud(now) {
   lastHud = now;
 }
 
-// mobile: hold 60 fps by stepping resolution down from the profile's, judged over 2 s
-// windows (a frame over 20 ms is a missed vsync), and back up once frames are clean again.
-// Still missing at the floor, render every other vsync for a steady 30.
-const auto = { n: -240, missed: 0, clean: 0, top: quality.resolution, cap30: false, odd: false };   // skip startup
+// 移动端：从配置档的分辨率逐步下调以保持 60 fps，按 2 秒窗口判断
+// （一帧超过 20 ms 即视为错过一次垂直同步），帧时间恢复干净后再回升。
+// 降到下限仍掉帧时，每隔一个垂直同步渲染一次以稳定在 30 帧。
+const auto = { n: -240, missed: 0, clean: 0, top: quality.resolution, cap30: false, odd: false };   // 跳过启动阶段
 function autoResolution(ms) {
-  if (ms > 250) return;   // tab switch or benchmark, not load
+  if (ms > 250) return;   // 标签页切换或基准测试，不是加载
   if (++auto.n <= 0) return;
   if (ms > (auto.cap30 ? 40 : 20)) auto.missed++;
   if (auto.n < 120 || auto.cap30) return;
@@ -559,7 +562,7 @@ function setResolution(r) {
   quality.resolution = Math.round(r * 20) / 20;
   resController.updateDisplay();
   resize();
-  auto.n = -60;   // the resize hitches; let it settle
+  auto.n = -60;   // 调整分辨率会造成卡顿；让它稳定下来
 }
 
 function tick(now) {
@@ -583,12 +586,12 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 
-// uncapped: frames back-to-back off the display's clock (it still shows the latest one at
-// each refresh), at most three in flight so the counter reads frames the GPU finished
+// 不限帧：帧背靠背渲染、脱离显示器的时钟（每次刷新仍显示最新一帧），
+// 最多三个在途，这样计数器读取的是 GPU 已完成的帧
 const fences = [], chan = new MessageChannel();
 chan.port1.onmessage = spin;
 function spin() {
-  if (!uncapped || document.hidden) {   // hidden: back to rAF, which pauses until visible
+  if (!uncapped || document.hidden) {   // 隐藏：回到 `rAF`，它在可见前会暂停
     fences.splice(0).forEach((s) => gl.deleteSync(s));
     requestAnimationFrame(loop);
     return;

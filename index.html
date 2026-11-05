@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Gelatin Water</title>
+  <title>Gelatin Water — 实时海面渲染</title>
   <style>
     html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
     canvas { display: block; width: 100%; height: 100%; }
@@ -38,10 +38,10 @@
   <div id="perf">
     <div id="pGpu"></div>
     <div id="pSpec"></div>
-    <div class="pRow"><b id="pFps">–</b><i>FPS</i><span><em id="pMode">VSYNC</em><br><span id="pMs"></span></span></div>
+    <div class="pRow"><b id="pFps">–</b><i>FPS</i><span><em id="pMode">垂直同步</em><br><span id="pMs"></span></span></div>
     <canvas id="pGraph" width="456" height="48"></canvas>
-    <button id="pUncap" type="button" title="Render frames back-to-back instead of once per display refresh, so the counter shows what this machine can do. The screen still updates at its own rate.">Uncap FPS</button>
-    <button id="pBench" type="button" title="Render 300 frames back-to-back with the scene paused and time them on the GPU. The screen freezes for about a second while it runs.">Run benchmark</button>
+    <button id="pUncap" type="button" title="背靠背渲染每一帧，而不是每个显示刷新周期渲染一次，这样计数器展示的是这台机器的实际能力。屏幕仍按自身刷新率更新。">解除限帧</button>
+    <button id="pBench" type="button" title="在场景暂停的情况下背靠背渲染 300 帧，并在 GPU 上计时。运行期间画面会冻结约一秒。">运行基准测试</button>
     <div id="hud"></div>
   </div>
   <script type="module" src="/src/main.js"></script>
