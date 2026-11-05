@@ -1,162 +1,164 @@
+简体中文 | [English](README.en.md)
+
 # Ultra Water
 
-Real-time ocean renderer for three.js (WebGL2), with a demo island scene.
+面向 three.js（WebGL2）的实时海洋渲染器，附带一个演示岛屿场景。
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open the printed localhost URL. Orbit with the mouse (or a finger: phones get their own profile, see [Phones and tablets](#phones-and-tablets)). It opens on the `Lagoon` shot. Pick others from the `camera` dropdown (they also set the sun). The performance panel (top left) shows the GPU, render size, fps, ms per frame and a 20 s graph. Its `Uncap FPS` button switches the loop off the display's refresh: frames then render back-to-back, with at most three in flight on the GPU, so the counter shows what the machine can do while the scene keeps running live. The screen still updates at its own rate. `Cap to display` switches back. `Run benchmark` (also `benchmark (uncapped)` in the settings) renders 300 frames back-to-back with the render loop paused and times them to GPU completion with a fence. The screen freezes for about a second while it runs, so it only runs when asked.
+打开打印出来的 localhost 网址。用鼠标环绕观察（或用手指：手机会采用自己的配置档，见 [手机与平板](#手机与平板)）。初始镜头为 `潟湖`。可从 `镜头` 下拉框中切换其他镜头（它们同时也会设置太阳）。性能面板（左上角）显示 GPU、渲染尺寸、fps、每帧毫秒数以及一张 20 秒曲线图。其中的 `解除限帧` 按钮会把渲染循环从显示器的刷新率上解绑：此后帧会背靠背连续渲染，GPU 上最多同时有三帧在途，因此计数器展示的是场景仍在实时运行时这台机器能达到的水平，而屏幕仍按自身的刷新率更新。`跟随刷新率` 则切回。`运行基准测试`（设置中还有 `基准测试（不限帧）`）会在渲染循环暂停的情况下背靠背渲染 300 帧，并用同步围栏测量其到 GPU 完成的时间。运行时画面会冻结约一秒，因此只在你主动触发时才执行。
 
-## Performance
+## 性能
 
-Measured with the in-page benchmark on an RTX 3060 (Chrome, ANGLE/D3D11), 4× MSAA, all features on, at 1954×1692 (3.3 MP, the pixel count of 1440p; `devicePixelRatio` 2 on the browser window):
+在 RTX 3060（Chrome、ANGLE/D3D11）上，以 4× MSAA、全部特性开启、分辨率 1954×1692（3.3 MP，即 1440p 的像素数；浏览器窗口上 `devicePixelRatio` 为 2），用页面内置基准测试测得：
 
-| Shot | ms / frame | fps (uncapped) |
+| 镜头 | 毫秒/帧 | fps（不限帧） |
 |---|---|---|
-| Open ocean | 3.30 | ~303 |
-| Golden hour | 4.35 | ~230 |
-| Aerial | 4.90 | ~204 |
-| Underwater | 4.93 | ~203 |
-| Breakers | 4.95 | ~202 |
-| Lagoon | 5.32 | ~188 |
-| Flotsam (10 floating props) | 5.79 | ~173 |
-| Surf rock | 5.92 | ~169 |
+| 开阔外海 | 3.30 | ~303 |
+| 黄金时刻 | 4.35 | ~230 |
+| 俯瞰 | 4.90 | ~204 |
+| 水下 | 4.93 | ~203 |
+| 碎浪 | 4.95 | ~202 |
+| 潟湖 | 5.32 | ~188 |
+| 漂浮物（10 个漂浮道具） | 5.79 | ~173 |
+| 拍岸礁石 | 5.92 | ~169 |
 
-Per pass in Breakers: water 1.90 ms, opaque (island, rocks, props) 1.63, post 0.38, caustics 0.22, FFT sim ~0.45 (independent of resolution). Caustics cost more under a low sun (about 0.37 ms in Golden hour), because the refracted rays fold more. Lagoon, Flotsam and Surf rock look down into the shallows, where nearly every water pixel runs the shore waves, foam and swash, so their water pass is 2.6–3.0 ms.
+碎浪镜头中每个阶段的耗时：水面 1.90 ms、不透明（岛屿、礁石、道具）1.63、后期 0.38、焦散 0.22、FFT 模拟约 0.45（与分辨率无关）。太阳低垂时焦散开销更高（黄金时刻约 0.37 ms），因为折射光线折叠得更多。潟湖、漂浮物与拍岸礁石镜头向下俯瞰浅水区，那里几乎每个水面像素都要运行海岸波浪、泡沫与上冲流，因此它们的水面阶段为 2.6–3.0 ms。
 
-Earlier versions of this README quoted numbers 2–4× lower. Those came from a benchmark that synced with `readPixels`/`finish`, which ANGLE doesn't wait on. The fence-based benchmark is the one to trust. The HUD's GPU timer-query numbers read high while vsync-capped, because the GPU downclocks between frames.
+本 README 的早期版本给出的数字要低 2–4 倍。那来自用 `readPixels`/`finish` 同步的基准测试，而 ANGLE 并不会等待它们。基于同步围栏的基准测试才值得信赖。在垂直同步限帧时，HUD 的 GPU 计时查询读数会偏高，因为 GPU 在帧与帧之间降频。
 
-### Phones and tablets
+### 手机与平板
 
-The same build spots phones and tablets (a finger as the main pointer, `matchMedia('(pointer: coarse)')`) and starts them on a lighter profile. Desktop is unchanged. Add `?mobile` or `?desktop` to the URL to force either.
+同一构建会识别手机与平板（以手指作为主要指针，`matchMedia('(pointer: coarse)')`），并让它们以更轻量的配置档启动。桌面端保持不变。在 URL 后加 `?mobile` 或 `?desktop` 可强制指定任一端。
 
-The mobile profile is resolution 0.6 (of the device pixel ratio, capped at 2), 2× MSAA, reflections at 0.35 scale and no bloom. On a phone the cost is mostly the number of render passes Chrome's GPU process has to translate, not pixels, so dropping bloom's 12 passes did more than lowering resolution. Auto resolution (`auto resolution` in the Quality folder) steps down by 0.05, to a floor of 0.5, when more than 4% of frames miss vsync over 2 s. It climbs back to 0.6 once frames are clean, and locks to a steady 30 fps if the floor still misses more than a quarter.
+移动端配置档为分辨率 0.6（按设备像素比的 0.6，上限为 2）、2× MSAA、反射以 0.35 倍缩放且不启用泛光。在手机上，开销主要来自 Chrome 的 GPU 进程需要转译的渲染阶段数量，而非像素，因此去掉泛光的 12 个阶段比降低分辨率更有效。自动分辨率（画质 文件夹中的 `自动分辨率`）会在超过 4% 的帧在 2 秒内错过垂直同步时，按 0.05 逐级下调，下限为 0.5；一旦帧变得干净，就会回升到 0.6；若降到下限后仍有超过四分之一的帧错过同步，则锁定在稳定的 30 fps。
 
-Measured before the shore update (surf rock, clear shallows, wet sand), on a OnePlus Nord 4 (Snapdragon 7+ Gen 3, Adreno 732, Chrome 156, which runs pages at 60 Hz on it), portrait, 424×782:
+在海岸更新之前（拍岸礁石、清澈浅水、湿沙）测得，设备为 OnePlus Nord 4（Snapdragon 7+ Gen 3、Adreno 732、Chrome 156，该机上的页面以 60 Hz 运行），竖屏，424×782：
 
-| Shot | live fps | missed frames | fps (uncapped) |
+| 镜头 | 实时 fps | 错过的帧 | fps（不限帧） |
 |---|---|---|---|
-| Open ocean | 60 | 0% | 142 |
-| Aerial | 60 | 0% | 118 |
-| Underwater | 60 | 0% | 103 |
-| Lagoon | 60 | 0% | 102 |
-| Flotsam | 60 | 0% | 101 |
-| Golden hour | 60 | 0% | 99 |
-| Breakers | 60 | 0% | 95 |
+| 开阔外海 | 60 | 0% | 142 |
+| 俯瞰 | 60 | 0% | 118 |
+| 水下 | 60 | 0% | 103 |
+| 潟湖 | 60 | 0% | 102 |
+| 漂浮物 | 60 | 0% | 101 |
+| 黄金时刻 | 60 | 0% | 99 |
+| 碎浪 | 60 | 0% | 95 |
 
-With the desktop settings (708×1304, 4× MSAA, bloom) the same phone ran 41–50 fps live, missing up to a third of its frames, and 62 fps uncapped on average. Phone numbers move with temperature. These were taken warm (thermal status 1) while charging over USB.
+使用桌面端设置（708×1304、4× MSAA、泛光）时，同一台手机实时跑到 41–50 fps，最多错过三分之一的帧，不限帧平均 62 fps。手机数据会随温度波动。这些数据是在温热状态（thermal status 1）下通过 USB 充电时测得的。
 
-## What's in it
+## 内容一览
 
-**Waves** (`src/water/OceanSim.js`)
-- Tessendorf FFT with 4 cascades of 600 / 85 / 12 / 2.1 m at 256², stacked in one 256×1024 atlas, so each Stockham IFFT stage is one MRT draw.
-- The 2.1 m cascade is the capillary band. It uses capillary-gravity dispersion (ω² = gk + σk³/ρ), and only its slopes are used, not its displacement. The 12 m cascade hands its sub-35 cm band to it (`capillaryFade`, calibrated so the summed mean-square slope stays near Cox–Munk).
-- JONSWAP wind sea plus swell, with cos-2s directional spreading.
-- ω is quantised to a 300 s loop, so fp32 phase never drifts.
-- Foam comes from the Jacobian, with dt-based recovery.
-- Slopes are stored as (sx, sz, sx², sz²). Their mips give the slope variance used for roughness (LEAN-style). Each cascade's 1×1 mip is its mean-square slope, and the Cox–Munk remainder for the wind speed is added as unresolved roughness.
+**波浪**（`src/water/OceanSim.js`）
+- Tessendorf FFT，含 4 个级联，尺寸分别为 600 / 85 / 12 / 2.1 m，采样为 256²，叠放在一个 256×1024 的图集中，因此每个 Stockham IFFT 阶段都是一次 MRT 绘制。
+- 2.1 m 级联是毛细波带。它使用毛细重力色散关系（ω² = gk + σk³/ρ），且只使用其斜率，不使用其位移。12 m 级联把其 35 cm 以下的频带交给它（`capillaryFade`，经过标定使总的均方斜率保持在 Cox–Munk 附近）。
+- JONSWAP 风浪叠加涌浪，采用 cos-2s 方向扩散。
+- ω 被量化到 300 秒的循环，因此 fp32 相位永不漂移。
+- 泡沫来自雅可比行列式，并按 dt 恢复。
+- 斜率以 (sx, sz, sx², sz²) 存储。它们的 mip 给出用于粗糙度的斜率方差（LEAN 风格）。每个级联的 1×1 mip 是其均方斜率，风速对应的 Cox–Munk 余项作为未解析的粗糙度叠加进去。
 
-**Surface** (`src/water/OceanSurface.js`)
-- A camera-centred polar grid (~190k verts) whose rings grow geometrically, scaled with camera height. Displacement is band-limited to the local vertex spacing with `textureLod`, so it doesn't swim.
-- Per-pixel shading:
-  - Normals and variance roughness from 4 cascades, geometric specular AA, Lagarde roughness-aware Fresnel.
-  - GGX sun with the island's and the floaters' shadows.
-  - Glints: the GGX lobe as a finite number of facets. Each pixel-sized cell draws a Poisson count of sun-mirroring facets, which crossfade between draws so they twinkle.
-  - Half-res mipmapped planar reflection of the island over the sky cube, blurred by roughness.
-  - Depth-validated refraction with a smooth fallback at object edges, Beer-Lambert absorption, Atlas-style subsurface scatter on crests, and aerial perspective.
-- Shore breakers run on an eikonal travel-time field (`shoreMap.js`: fast sweeping from the coast with c = √(g·depth), then direction, front curvature and a ray-tube shoaling factor):
-  - The phase is ω(τ + t), so fronts slow down, bunch up and refract around the bathymetry.
-  - Green's law plus ray-tube shoaling, a breaking limit of 0.42 × depth, and bigger sets on coasts facing the swell.
-  - Plunging lean near the break point, with translucent lips. The lean and both wave trains' Gerstner pinch share one budget, so the heightfield never folds over.
-  - Peeling: each crest breaks early in some sections and late in others, with a new layout every wave.
-  - Where fronts from two coast stretches meet (shocks), the waves fade out instead of folding into sheets.
-  - A rock in the surf is baked into the travel-time field as a dome, so fronts wrap round it, break on its face and leave a sheltered lee. The stored bed ignores the dome, so the seabed itself is unchanged.
-  - Each train is band-limited to the grid's sample spacing. The camera-centred grid slides as the view moves, so a crest only a cell or two long would be resampled differently every frame and the waterline would warp and flash.
-- Foam:
-  - The baked foam texture holds a lace pattern plus a "cauliflower" billow height and its gradient.
-  - Crest whitewater is textured on the displaced surface with a world-space flow map that rides shoreward at the phase speed. Its two phases are crossfaded, which also makes it churn.
-  - Coverage erodes with age, from solid whitewater to holes to lace. The billows bump the normal and shade their creases. Thin foam is tinted by the water under it and glows when backlit. Bubble tops get a little sheen.
-  - Lace stays behind in the surf zone and drifts shoreward.
-  - Small breakers spilling over bars get a wide, faint foam tail instead of a bright line along every crest. Only real breakers throw spray.
-  - The rock gets churned lace streaming into its lee, scaled by how fresh the last hit was. Waterline foam is broken into drifting patches, so it never traces the shore as a white rim, and fades on the vanishing film at the edge and far off, where it would only sparkle.
-- Clear shallows: sand stirred up under and behind the bores absorbs and shifts the colour sandy-green, rather than milking the water white. Fresh bores carry a thin, patchy veil that breaks into lace in the wash.
-- Beach swash (shared GLSL with the terrain): each bore runs up the sand and drains back as a thin film with a foam edge, leaving a wet line that dries over a few seconds. The film is a faint sheen rather than a sky mirror, its front is antialiased with distance, and wet sand darkens roughly as albedo squared, so the waterline dissolves into warm wet sand.
-- The surface never dips below the bed + 4 cm where the bed is under sea level (the clearance grows with distance, as depth precision falls off). Coarse far troughs used to show dry, caustic-lit sand through bars and flats.
-- Spray (`Spray.js`), drawn as droplet clouds rather than smooth puffs:
-  - Crests slamming into the rock, and the swash front hitting it on the beach, throw spray up its face, so the water stops against the rock instead of sliding through.
-  - A floater hitting the water starts Cauchy–Poisson ripple rings, plus a splash crown.
-  - Droplets are drawn at least 1.5 px across and faded by their coverage, so distant ones don't flicker as they cross pixel centres.
-- FFT swell fades out in the shallows and the shore waves take over.
+**水面**（`src/water/OceanSurface.js`）
+- 以相机为中心的极坐标网格（约 19 万个顶点），其环按几何级数向外增长，并随相机高度缩放。位移用 `textureLod` 按局部顶点间距做带限，因此不会游移。
+- 逐像素着色：
+  - 来自 4 个级联的法线与方差粗糙度、几何高光 AA、Lagarde 粗糙度感知 Fresnel。
+  - 带岛屿与浮体阴影的 GGX 太阳。
+  - 闪光：把 GGX 波瓣当作有限数量的微面。每个像素大小的单元绘制泊松分布的镜像太阳微面，并在两次绘制之间交叉淡化，从而闪烁。
+  - 半分辨率 mipmapped 的平面反射，将岛屿叠放在天空立方体贴图之上，并按粗糙度模糊。
+  - 经深度校验的折射，在物体边缘平滑回退，配以 Beer-Lambert 吸收、波峰上的 Atlas 风格次表面散射以及空气透视。
+- 海岸碎浪基于程函走时场运行（`shoreMap.js`：以 c = √(g·depth) 从海岸快速扫掠，再得到方向、波前曲率和射线管浅化因子）：
+  - 相位为 ω(τ + t)，因此波前会减速、聚拢并绕水深场折射。
+  - Green 定律加上射线管浅化，破碎极限为 0.42 × 水深，面向涌浪的海岸会形成更大的波列。
+  - 破碎点附近的倾覆式倾斜，配以半透明的浪唇。倾斜与两列波的 Gerstner 挤压共享同一预算，因此高度场永不自相交折叠。
+  - 分段破碎：每个波峰有的区段先碎、有的区段后碎，每一波浪都有新的布局。
+  - 当来自两段海岸的波前相遇（冲击）时，波浪会淡出，而不是折叠成片状。
+  - 拍岸浪中的礁石以穹顶形式烘焙进行走时场，因此波前会绕过它、在其迎浪面破碎，并留下被遮蔽的背风区。存储的海床忽略该穹顶，因此海底本身不变。
+  - 每列波都按网格采样间距做带限。以相机为中心的网格会随视角移动而滑动，因此只有一两个单元长的波峰若逐帧以不同方式重采样，水线就会扭曲并闪烁。
+- 泡沫：
+  - 烘焙的泡沫纹理包含蕾丝图案，外加“花椰菜”状的浪涌高度及其梯度。
+  - 波峰白水在位移后的表面上以世界空间流图贴图，并以相速度向岸边移动。它的两个相位交叉淡化，这也让它翻腾。
+  - 覆盖度随时间侵蚀，从实心白水到破洞再到蕾丝。浪涌会扰动法线并给褶皱加阴影。薄泡沫会被其下方水体染色，并在逆光时发光。气泡顶部带有少许光泽。
+  - 蕾丝留在拍岸浪区，并向岸边漂移。
+  - 越过沙洲溢出的碎浪得到一条宽阔而淡的泡沫尾迹，而不是沿每个波峰的亮线。只有真正的碎浪才会激起水花。
+  - 礁石背风区会流入翻腾的蕾丝，其强度取决于最近一次拍击的新鲜程度。水线泡沫被打散成漂移的斑块，因此它从不会沿海岸描出一条白边，并在边缘和远处的消失薄膜上淡出——那里它只会闪闪发亮。
+- 清澈浅水：在溃波下方及后方被搅起的沙子会吸收并让颜色偏沙绿色，而不是把水弄成乳白色。新鲜的溃波带着一层薄而斑驳的纱幕，在冲刷中碎裂成蕾丝。
+- 海滩上冲流（与地形共用 GLSL）：每个溃波冲上沙滩，再以带泡沫边缘的薄水膜退回，留下一条几秒内逐渐变干的湿线。这层水膜是淡淡的光泽而非天空的镜面，其前缘随距离抗锯齿，湿沙大致按反照率的平方变暗，因此水线会融入温暖的湿沙。
+- 在海床低于海平面的地方，水面绝不会低于海床 + 4 cm（该间隙随距离增大，因为深度精度会下降）。远处粗大的波谷曾经会透过沙洲和滩地露出干燥、被焦散照亮的沙子。
+- 水花（`Spray.js`）绘制为液滴云而非平滑的烟团：
+  - 波峰撞击礁石，以及海滩上上冲流前缘拍打礁石，都会把水花抛向礁石表面，因此水会在礁石前止住，而不是滑穿过去。
+  - 浮体落入水中会激起 Cauchy–Poisson 涟漪环，外加一个溅水冠。
+  - 液滴至少绘制为 1.5 px 宽，并按覆盖度淡化，因此远处的液滴在穿过像素中心时不会闪烁。
+- FFT 涌浪在浅水区淡出，由海岸波浪接替。
 
-**Caustics** (`src/water/Caustics.js`)
-- Area-ratio splatting (after Evan Wallace): a grid over the 12 m cascade is refracted through its slopes onto planes at 1.5, 4 and 10 m. Each landed triangle adds its area ratio, so the pattern has a mean of 1 and only redistributes the direct sun.
-- The slopes are sampled with a cubic B-spline. With bilinear sampling every slope texel would land as its own bead along the caustic lines.
-- Both splat targets are 4× MSAA, so fold slivers thinner than a texel add by coverage instead of breaking into dots. They are sized by the sun-disc blur at each depth: 512² (2.3 cm) for 1.5 m, 256² for 4 m and 10 m.
-- Lookups go through the refracted entry point, so the seabed, the props and the underwater shafts all see the same pattern.
+**焦散**（`src/water/Caustics.js`）
+- 面积比泼溅（源自 Evan Wallace）：覆盖在 12 m 级联上的网格经其斜率折射到 1.5、4 和 10 m 的平面上。每个落地的三角形叠加其面积比，因此图案均值为 1，只对直射太阳光做再分配。
+- 斜率以三次 B 样条采样。若用双线性采样，每个斜率纹素都会沿焦散线落地成一颗独立的珠点。
+- 两个泼溅目标都是 4× MSAA，因此比纹素更薄的折叠细条会按覆盖度累加，而不是碎成点。它们的尺寸按各深度的太阳圆盘模糊确定：1.5 m 用 512²（2.3 cm），4 m 与 10 m 用 256²。
+- 查询都经过折射入射点，因此海床、道具和水下光束看到的都是同一图案。
 
-**Underwater** (`src/water/UnderwaterPass.js`, underside branch in `OceanSurface.js`)
-- The water mesh is double-sided. Seen from below it shades Snell's window:
-  - The sky in the refracted direction, the sun as a GGX transmission lobe, and anything above the water from the frame.
-  - Outside the window, total internal reflection mirrors the deep-water colour.
-  - The critical-angle edge is blurred by the roughness.
-- A fullscreen pass runs when the camera is near or below the surface:
-  - Waterline split per pixel. The water pass tags what each pixel sees in alpha; elsewhere a coarse 64×36 lens-depth target is used.
-  - A meniscus line where the top meets the underside near the lens.
-  - Beer-Lambert extinction towards an in-scatter colour that matches the underside.
-  - Half-res sun shafts: 24 jittered steps of Henyey-Greenstein single scattering, lit through the wave caustics and the terrain and floater shadows at each sample's surface entry point, with a depth-aware 4-tap upsample.
-- Marine snow (`MarineSnow.js`), exposure compensation under water (`underwater exposure`), and water droplets on the lens for a few seconds after surfacing.
+**水下**（`src/water/UnderwaterPass.js`，底面分支在 `OceanSurface.js` 中）
+- 水面网格是双面的。从下方看，它着色出 Snell 窗口：
+  - 折射方向的天空、作为 GGX 透射波瓣的太阳，以及帧中水面以上的任何物体。
+  - 窗口之外，全内反射镜像出深水颜色。
+  - 临界角边缘被粗糙度模糊。
+- 当相机接近或低于水面时，会运行一个全屏阶段：
+  - 逐像素分割水线。水面阶段把每个像素看到的内容标记在 alpha 中；其他地方使用一个粗略的 64×36 镜头深度目标。
+  - 在镜头附近顶部与底面交汇处画一条弯月面线。
+  - 朝与底面匹配的内散射颜色做 Beer-Lambert 消光。
+  - 半分辨率太阳光束：24 步抖动采样的 Henyey-Greenstein 单次散射，在每个采样点的水面入射点处被波浪焦散以及地形和浮体阴影照亮，并以深度感知的 4-tap 上采样。
+- 海雪（`MarineSnow.js`）、水下曝光补偿（`水下曝光`），以及浮出水面后持续几秒的镜头水珠。
 
-**Floating objects** (`src/water/WaterQuery.js`, `src/scene/floaters.js`, `src/scene/floaterMeshes.js`, `src/scene/floaterShadow.js`)
-- Water heights come from the GPU. A 512×1 pass evaluates exactly the rendered surface, and is read back asynchronously (PBO + fence), so it never stalls.
-- Rigid bodies (crate, barrel, buoy, boat):
-  - Buoyancy per cell, with drag against the local water velocity.
-  - 240 Hz substeps.
-  - Contact with the island heightfield for beaching.
-- Floaters have their own sun shadow map: an ortho camera fitted to the bodies every frame, so the big static shadow map is never re-rendered. It is read by the water, the terrain (at the refracted entry point under water) and the shafts.
+**漂浮物**（`src/water/WaterQuery.js`、`src/scene/floaters.js`、`src/scene/floaterMeshes.js`、`src/scene/floaterShadow.js`）
+- 水面高度来自 GPU。一个 512×1 阶段精确求值实际渲染的水面，并以异步方式读回（PBO + 同步围栏），因此从不阻塞。
+- 刚体（板条箱、圆桶、浮标、小船）：
+  - 逐单元浮力，并带与局部水体速度相反的阻力。
+  - 240 Hz 子步。
+  - 与岛屿高度场接触以实现搁浅。
+- 浮体拥有自己的太阳阴影贴图：一个每帧贴合这些刚体的正交相机，因此大的静态阴影贴图永不需要重新渲染。水面、地形（在水下的折射入射点处）和光束都会读取它。
 
-**Pipeline** (`src/main.js`)
-1. Ingest the last water query, step the floaters, then:
-   - render the floater shadow map;
-   - update the impact rings;
-   - run the FFT;
-   - splat the caustics;
-   - submit the next query.
-2. Planar reflection (half res, skipped underwater).
-3. Opaque pass into a single 4× MSAA HDR target.
-4. Water pass, depth-tested against the kept MSAA depth for correct per-sample edges.
-5. Underwater pass, when near or below the surface.
-6. Post (`PostFX.js`):
-   - GPU auto exposure, metered in log space and adapted over time; the GUI value is compensation.
-   - Dual-filter bloom with Karis average.
-   - AgX.
-   - Lens droplets.
-   - TPDF dither.
+**渲染管线**（`src/main.js`）
+1. 读取上一次水面查询、推进浮体，然后：
+   - 渲染浮体阴影贴图；
+   - 更新冲击涟漪环；
+   - 运行 FFT；
+   - 泼溅焦散；
+   - 提交下一次查询。
+2. 平面反射（半分辨率，水下时跳过）。
+3. 不透明阶段，写入单个 4× MSAA HDR 目标。
+4. 水面阶段，针对保留的 MSAA 深度做深度测试，以获得正确的逐采样边缘。
+5. 水下阶段，当相机接近或低于水面时。
+6. 后期（`PostFX.js`）：
+   - GPU 自动曝光，在对数空间测光并随时间适应；GUI 中的数值是补偿量。
+   - 带 Karis 平均的双滤波泛光。
+   - AgX。
+   - 镜头水珠。
+   - TPDF 抖动。
 
-**Scene**
-- Hillaire 2020 atmosphere (`atmosphere.js`): transmittance, multiple-scattering and sky-view LUTs with ozone. Clouds are on top. It is baked into a mipmapped 1024 HDR cube when the sun moves, and serves as the background, reflection, fog colour and IBL.
-- Procedural island with:
-  - Biome shading and wet sand, with a soft seabed/sand seam.
-  - Swash film and wet line.
-  - Wave-formed sand ripples whose crests meander, fork and fade in patches.
-  - Sunlight that arrives refracted under water, dimmed by Fresnel transmission and absorbed along its path. Both shadow maps are read at the surface entry point, so up-sun sand bars don't shadow the whole bed.
-  - Wave caustics.
-- Instanced rocks. The static shadow map re-renders only when the sun moves.
+**场景**
+- Hillaire 2020 大气（`atmosphere.js`）：带臭氧的透射率、多重散射和天空视角 LUT。云层叠于其上。太阳移动时，它被烘焙成 mipmapped 1024 HDR 立方体贴图，并用作背景、反射、雾色和 IBL。
+- 程序化岛屿，包含：
+  - 生物群落着色与湿沙，带柔和的海床/沙滩接缝。
+  - 上冲流水膜与湿线。
+  - 波浪塑成的沙波纹，其波峰蜿蜒、分叉并成片淡出。
+  - 在水下经折射到达的阳光，被 Fresnel 透射减弱并沿路径被吸收。两张阴影贴图都在水面入射点处读取，因此迎光侧的沙洲不会给整个海床投下阴影。
+  - 波浪焦散。
+- 实例化礁石。静态阴影贴图只在太阳移动时重新渲染。
 
-The `Water` folder has a `colour preset` dropdown (clear, tropical, toxic green, purple, rust orange, murky brown). Each sets the absorption, in-scatter colour, thin-foam tint and underwater scattering together; `clarity` and `scatter` still adjust on top.
+`水体` 文件夹有一个 `配色预设` 下拉框（清澈、热带、毒绿、紫罗兰、锈橙、浑浊棕）。每个预设会同时设置吸收系数、内散射颜色、薄泡沫色调和水下散射；`清澈度` 和 `内散射` 仍可在此基础上继续调整。
 
-Camera presets: `Golden hour`, `Breakers`, `Lagoon`, `Surf rock`, `Open ocean`, `Aerial`, `Flotsam` and `Underwater`. `Flotsam` and `Underwater` spawn a field of floating props. The `Floaters & underwater` folder has spawn, drop and clear buttons, plus drag, buoyancy, scattering, shaft and meniscus controls.
+相机预设：`黄金时刻`、`碎浪`、`潟湖`、`拍岸礁石`、`开阔外海`、`俯瞰`、`漂浮物` 和 `水下`。`漂浮物` 与 `水下` 会生成一片漂浮道具。`漂浮物与水下` 文件夹包含生成、投放和清除按钮，以及阻力、浮力、散射、光束和弯月面控件。
 
-## Not in yet
+## 尚未实现
 
-- Wakes behind moving objects. Floaters only disturb the water when they drop in (rings and splash).
-- Floaters don't collide with each other.
-- Breakers are heightfield waves, so they lean but never curl over into a tube.
-- The surface mesh is a fan inside 1 m of the camera, so detail right at the lens is coarse when sitting on the waterline.
+- 运动物体后方的尾迹。浮体只在下落时扰动水面（涟漪环与溅水）。
+- 浮体之间不会互相碰撞。
+- 碎浪是高度场波浪，因此只会倾斜，绝不会卷成筒状。
+- 水面网格在相机 1 m 内呈扇形，因此坐在水线上时，镜头正下方的细节较粗糙。
 
-The design was argued out with a second agent before building, and again for each round of upgrades.
+该设计在构建之前与第二个 agent 反复论证过，每一轮升级时也再次如此。
 
-## License
+## 许可证
 
-MIT, see [LICENSE](LICENSE). Code adapted from other projects is listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+MIT，见 [LICENSE](LICENSE)。改编自其他项目的代码列于 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
